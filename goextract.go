@@ -10,6 +10,7 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"io/ioutil"
 	"os"
 	"strings"
 )
@@ -48,24 +49,11 @@ func (visitor *parentVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	return &parentVisitor{parent: node, fset: visitor.fset}
 }
 
-// This example shows what an AST looks like when printed for debugging.
 func main() {
-	// src is the input for which we want to print the AST.
-	const src = `
-package main
-import (
-"fmt"
-)
-func main() {
-i :=3
-println(i)
-	fmt.Println(i)
-}
-
-func bla(myparam int) int {
-	return 0
-}
-`
+	source, err := ioutil.ReadFile("single_declaration.go.input")
+	if err != nil {
+		panic(err)
+	}
 
 	// 3 cases:
 	// 1. Pure expression
@@ -74,7 +62,7 @@ func bla(myparam int) int {
 
 	// Create the AST by parsing src.
 	fset := token.NewFileSet() // positions are relative to fset
-	f, err := parser.ParseFile(fset, "", src, 0)
+	f, err := parser.ParseFile(fset, "", string(source), 0)
 	if err != nil {
 		panic(err)
 	}
