@@ -99,15 +99,17 @@ func bla(myparam int) int {
 	}
 
 	// assume len(nodes) == 1 ==> simple expression:
+
+	extractedExpressionNode := nodesToExtract[0].(ast.Expr)
 	switch posParent.(type) {
 	case *ast.AssignStmt:
 		for i, rhs := range posParent.(*ast.AssignStmt).Rhs {
-			if rhs == nodesToExtract[0] {
+			if rhs == extractedExpressionNode {
 				posParent.(*ast.AssignStmt).Rhs[i] =
 					&ast.CallExpr{Fun: &ast.Ident{Name: "MyExtractedFunc"}}
 			}
 		}
-
+		// Add more cases here, e.g. for CallExpr
 	}
 	f.Decls = append(f.Decls, &ast.FuncDecl{
 		Name: &ast.Ident{Name: "MyExtractedFunc"},
@@ -115,7 +117,7 @@ func bla(myparam int) int {
 			Results: &ast.FieldList{
 				List: []*ast.Field{
 					&ast.Field{
-						Type: &ast.Ident{Name: strings.ToLower(nodesToExtract[0].(*ast.BasicLit).Kind.String())},
+						Type: &ast.Ident{Name: strings.ToLower(extractedExpressionNode.(*ast.BasicLit).Kind.String())},
 					},
 				},
 			},
@@ -124,7 +126,7 @@ func bla(myparam int) int {
 			List: []ast.Stmt{
 				&ast.ReturnStmt{
 					Results: []ast.Expr{
-						nodesToExtract[0].(ast.Expr),
+						extractedExpressionNode,
 					},
 				},
 			},
