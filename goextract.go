@@ -61,27 +61,27 @@ func main() {
 	// 3. Final assignment to local variable -> list of statements where final is an assignment
 
 	// Create the AST by parsing src.
-	fset := token.NewFileSet() // positions are relative to fset
-	f, err := parser.ParseFile(fset, "", string(source), 0)
+	fileSet := token.NewFileSet() // positions are relative to fset
+	astFile, err := parser.ParseFile(fileSet, "", string(source), 0)
 	if err != nil {
 		panic(err)
 	}
 
 	fmt.Printf(
 		"%v:%v %v:%v \n",
-		fset.Position(f.Decls[1].Pos()).Line,
-		fset.Position(f.Decls[1].Pos()).Column,
-		fset.Position(f.Decls[1].End()).Line,
-		fset.Position(f.Decls[1].End()).Column,
+		fileSet.Position(astFile.Decls[1].Pos()).Line,
+		fileSet.Position(astFile.Decls[1].Pos()).Column,
+		fileSet.Position(astFile.Decls[1].End()).Line,
+		fileSet.Position(astFile.Decls[1].End()).Column,
 	)
-	visitor := &parentVisitor{fset: fset}
-	ast.Walk(visitor, f)
+	visitor := &parentVisitor{fset: fileSet}
+	ast.Walk(visitor, astFile)
 	if posParent == endParent {
 		fmt.Println("parent: ")
-		ast.Print(fset, posParent)
+		ast.Print(fileSet, posParent)
 		fmt.Println("to extract: ")
 		for _, node := range nodesToExtract {
-			ast.Print(fset, node)
+			ast.Print(fileSet, node)
 		}
 
 	}
@@ -99,7 +99,7 @@ func main() {
 		}
 		// Add more cases here, e.g. for CallExpr
 	}
-	f.Decls = append(f.Decls, &ast.FuncDecl{
+	astFile.Decls = append(astFile.Decls, &ast.FuncDecl{
 		Name: &ast.Ident{Name: "MyExtractedFunc"},
 		Type: &ast.FuncType{
 			Results: &ast.FieldList{
@@ -121,7 +121,7 @@ func main() {
 		},
 	})
 	// Print the AST.
-	ast.Print(fset, f)
-	printer.Fprint(os.Stdout, fset, f)
+	ast.Print(fileSet, astFile)
+	printer.Fprint(os.Stdout, fileSet, astFile)
 
 }
