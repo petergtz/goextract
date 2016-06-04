@@ -20,16 +20,15 @@ import (
 	"go/token"
 	"strings"
 
-	. "github.com/onsi/gomega"
 	"github.com/petergtz/goextract/util"
 )
 
-type selection struct {
-	begin, end position
+type Selection struct {
+	Begin, End Position
 }
 
-type position struct {
-	line, column int
+type Position struct {
+	Line, Column int
 }
 
 type visitorContext struct {
@@ -39,7 +38,7 @@ type visitorContext struct {
 	nodesToExtract []ast.Node
 	shouldRecord   bool
 
-	selection selection
+	selection Selection
 }
 
 type astNodeVisitor struct {
@@ -52,16 +51,16 @@ func (visitor *astNodeVisitor) Visit(node ast.Node) (w ast.Visitor) {
 		// fmt.Print("The node: ")
 		// ast.Print(visitor.fset, node)
 		// fmt.Print("The pos: ", visitor.fset.Position(node.Pos()).Line, ":", visitor.fset.Position(node.Pos()).Column, "\n")
-		if visitor.context.fset.Position(node.Pos()).Line == visitor.context.selection.begin.line &&
-			visitor.context.fset.Position(node.Pos()).Column == visitor.context.selection.begin.column {
+		if visitor.context.fset.Position(node.Pos()).Line == visitor.context.selection.Begin.Line &&
+			visitor.context.fset.Position(node.Pos()).Column == visitor.context.selection.Begin.Column {
 			visitor.context.posParent = visitor.parentNode
 			visitor.context.shouldRecord = true
 		}
 		if visitor.context.shouldRecord {
 			visitor.context.nodesToExtract = append(visitor.context.nodesToExtract, node)
 		}
-		if visitor.context.fset.Position(node.End()).Line == visitor.context.selection.end.line &&
-			visitor.context.fset.Position(node.End()).Column == visitor.context.selection.end.column {
+		if visitor.context.fset.Position(node.End()).Line == visitor.context.selection.End.Line &&
+			visitor.context.fset.Position(node.End()).Column == visitor.context.selection.End.Column {
 			visitor.context.endParent = visitor.parentNode
 			visitor.context.shouldRecord = false
 		}
@@ -83,33 +82,30 @@ func (visitor *astNodeVisitor) Visit(node ast.Node) (w ast.Visitor) {
 // )
 
 func main() {
-	RegisterFailHandler(func(message string, callerSkip ...int) { fmt.Println(message) })
-
-	output := extractFileToString("single_declaration.go.input", selection{position{7, 5}, position{7, 6}}, "MyExtractedFunc")
-	Expect(output).To(Equal(util.ReadFileAsStringOrPanic("single_declaration.go.output")))
+	fmt.Println("Dummy")
 }
 
-func extractFileToFile(inputFileName string, selection selection, extractedFuncName string, outputFilename string) {
+func ExtractFileToFile(inputFileName string, selection Selection, extractedFuncName string, outputFilename string) {
 	fileSet, astFile := astFromFile(inputFileName)
 	createAstFileDump(inputFileName+".ast", fileSet, astFile)
 	doExtraction(fileSet, astFile, selection, extractedFuncName)
 	util.WriteFileAsStringOrPanic(outputFilename, stringFrom(fileSet, astFile))
 }
 
-func extractFileToString(inputFileName string, selection selection, extractedFuncName string) string {
+func ExtractFileToString(inputFileName string, selection Selection, extractedFuncName string) string {
 	fileSet, astFile := astFromFile(inputFileName)
 	createAstFileDump(inputFileName+".ast", fileSet, astFile)
 	doExtraction(fileSet, astFile, selection, extractedFuncName)
 	return stringFrom(fileSet, astFile)
 }
 
-func extractStringToString(input string, selection selection, extractedFuncName string) string {
+func ExtractStringToString(input string, selection Selection, extractedFuncName string) string {
 	fileSet, astFile := astFromInput(input)
 	doExtraction(fileSet, astFile, selection, extractedFuncName)
 	return stringFrom(fileSet, astFile)
 }
 
-func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection selection, extractedFuncName string) {
+func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection, extractedFuncName string) {
 
 	visitor := &astNodeVisitor{parentNode: nil, context: &visitorContext{fset: fileSet, selection: selection}}
 	ast.Walk(visitor, astFile)
