@@ -106,13 +106,21 @@ func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection selection
 	// }
 
 	// assume len(nodes) == 1 ==> simple expression:
+	if len(visitor.context.nodesToExtract) == 1 {
+		extractExpression(astFile, visitor.context, extractedFuncName)
+	} else {
+		panic("Only expression extractions are supported so far.")
+	}
 
-	extractedExpressionNode := visitor.context.nodesToExtract[0].(ast.Expr)
-	switch visitor.context.posParent.(type) {
+}
+
+func extractExpression(astFile *ast.File, context *visitorContext, extractedFuncName string) {
+	extractedExpressionNode := context.nodesToExtract[0].(ast.Expr)
+	switch context.posParent.(type) {
 	case *ast.AssignStmt:
-		for i, rhs := range visitor.context.posParent.(*ast.AssignStmt).Rhs {
+		for i, rhs := range context.posParent.(*ast.AssignStmt).Rhs {
 			if rhs == extractedExpressionNode {
-				visitor.context.posParent.(*ast.AssignStmt).Rhs[i] =
+				context.posParent.(*ast.AssignStmt).Rhs[i] =
 					&ast.CallExpr{Fun: &ast.Ident{Name: extractedFuncName}}
 			}
 		}
