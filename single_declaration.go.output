@@ -1,0 +1,18 @@
+package main
+
+import (
+	"fmt"
+)
+
+func main() {
+	i := MyExtractedFunc()
+	println(i)
+	fmt.Println(i)
+}
+
+func bla(myparam int) int {
+	return 0
+}
+func MyExtractedFunc() int {
+	return 3
+}

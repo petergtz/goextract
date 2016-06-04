@@ -5,14 +5,15 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"go/ast"
-	"go/parser"
 	"go/printer"
 	"go/token"
-	"io/ioutil"
-	"os"
 	"strings"
+
+	. "github.com/onsi/gomega"
+	"github.com/petergtz/goextract/util"
 )
 
 type parentVisitor struct {
@@ -50,30 +51,31 @@ func (visitor *parentVisitor) Visit(node ast.Node) (w ast.Visitor) {
 }
 
 func main() {
-	source, err := ioutil.ReadFile("single_declaration.go.input")
-	if err != nil {
-		panic(err)
-	}
 
 	// 3 cases:
 	// 1. Pure expression
 	// 2. Pure procedural (implies side effects) -> list of statemtents -> no return value
 	// 3. Final assignment to local variable -> list of statements where final is an assignment
 
-	// Create the AST by parsing src.
-	fileSet := token.NewFileSet() // positions are relative to fset
-	astFile, err := parser.ParseFile(fileSet, "", string(source), 0)
-	if err != nil {
-		panic(err)
-	}
+	fileSet, astFile := astFrom("single_declaration.go.input")
 
-	fmt.Printf(
-		"%v:%v %v:%v \n",
-		fileSet.Position(astFile.Decls[1].Pos()).Line,
-		fileSet.Position(astFile.Decls[1].Pos()).Column,
-		fileSet.Position(astFile.Decls[1].End()).Line,
-		fileSet.Position(astFile.Decls[1].End()).Column,
-	)
+	// fmt.Println(
+	// 	fileSet.Position(astFile.Decls[1].Pos()),
+	// 	fileSet.Position(astFile.Decls[1].End()),
+	// )
+
+	doExtraction(fileSet, astFile)
+	createAstFileDump("single_declaration.go.output"+".ast", fileSet, astFile)
+
+	buf := new(bytes.Buffer)
+	printer.Fprint(buf, fileSet, astFile)
+	RegisterFailHandler(func(message string, callerSkip ...int) { fmt.Println(message) })
+	Expect(buf.String()).To(Equal(util.ReadFileAsStringOrPanic("single_declaration.go.output")))
+
+}
+
+func doExtraction(fileSet *token.FileSet, astFile *ast.File) {
+
 	visitor := &parentVisitor{fset: fileSet}
 	ast.Walk(visitor, astFile)
 	if posParent == endParent {
@@ -120,8 +122,5 @@ func main() {
 			},
 		},
 	})
-	// Print the AST.
-	ast.Print(fileSet, astFile)
-	printer.Fprint(os.Stdout, fileSet, astFile)
 
 }
