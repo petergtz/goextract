@@ -5,10 +5,8 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"go/ast"
-	"go/printer"
 	"go/token"
 	"strings"
 
@@ -64,28 +62,41 @@ func (visitor *astNodeVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	}
 }
 
+// 3 cases:
+// 1. Pure expression
+// 2. Pure procedural (implies side effects) -> list of statemtents -> no return value
+// 3. Final assignment to local variable -> list of statements where final is an assignment
+
+// fmt.Println(
+// 	fileSet.Position(astFile.Decls[1].Pos()),
+// 	fileSet.Position(astFile.Decls[1].End()),
+// )
+
 func main() {
-
-	// 3 cases:
-	// 1. Pure expression
-	// 2. Pure procedural (implies side effects) -> list of statemtents -> no return value
-	// 3. Final assignment to local variable -> list of statements where final is an assignment
-
-	fileSet, astFile := astFrom("single_declaration.go.input")
-
-	// fmt.Println(
-	// 	fileSet.Position(astFile.Decls[1].Pos()),
-	// 	fileSet.Position(astFile.Decls[1].End()),
-	// )
-
-	doExtraction(fileSet, astFile, selection{position{7, 5}, position{7, 6}}, "MyExtractedFunc")
-	createAstFileDump("single_declaration.go.output"+".ast", fileSet, astFile)
-
-	buf := new(bytes.Buffer)
-	printer.Fprint(buf, fileSet, astFile)
 	RegisterFailHandler(func(message string, callerSkip ...int) { fmt.Println(message) })
-	Expect(buf.String()).To(Equal(util.ReadFileAsStringOrPanic("single_declaration.go.output")))
 
+	output := extractFileToString("single_declaration.go.input", selection{position{7, 5}, position{7, 6}}, "MyExtractedFunc")
+	Expect(output).To(Equal(util.ReadFileAsStringOrPanic("single_declaration.go.output")))
+}
+
+func extractFileToFile(inputFileName string, selection selection, extractedFuncName string, outputFilename string) {
+	fileSet, astFile := astFromFile(inputFileName)
+	createAstFileDump(inputFileName+".ast", fileSet, astFile)
+	doExtraction(fileSet, astFile, selection, extractedFuncName)
+	util.WriteFileAsStringOrPanic(outputFilename, stringFrom(fileSet, astFile))
+}
+
+func extractFileToString(inputFileName string, selection selection, extractedFuncName string) string {
+	fileSet, astFile := astFromFile(inputFileName)
+	createAstFileDump(inputFileName+".ast", fileSet, astFile)
+	doExtraction(fileSet, astFile, selection, extractedFuncName)
+	return stringFrom(fileSet, astFile)
+}
+
+func extractStringToString(input string, selection selection, extractedFuncName string) string {
+	fileSet, astFile := astFromInput(input)
+	doExtraction(fileSet, astFile, selection, extractedFuncName)
+	return stringFrom(fileSet, astFile)
 }
 
 func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection selection, extractedFuncName string) {
