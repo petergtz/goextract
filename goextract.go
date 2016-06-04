@@ -16,38 +16,52 @@ import (
 	"github.com/petergtz/goextract/util"
 )
 
-type parentVisitor struct {
-	parent       ast.Node
-	fset         *token.FileSet
-	shouldRecord bool
+type selection struct {
+	begin, end position
 }
 
-var (
+type position struct {
+	line, column int
+}
+
+type visitorContext struct {
+	fset           *token.FileSet
 	posParent      ast.Node
 	endParent      ast.Node
-	nodesToExtract = make([]ast.Node, 0)
-)
+	nodesToExtract []ast.Node
+	shouldRecord   bool
 
-func (visitor *parentVisitor) Visit(node ast.Node) (w ast.Visitor) {
+	selection selection
+}
+
+type astNodeVisitor struct {
+	parentNode ast.Node
+	context    *visitorContext
+}
+
+func (visitor *astNodeVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	if node != nil {
 		// fmt.Print("The node: ")
 		// ast.Print(visitor.fset, node)
 		// fmt.Print("The pos: ", visitor.fset.Position(node.Pos()).Line, ":", visitor.fset.Position(node.Pos()).Column, "\n")
-		if visitor.fset.Position(node.Pos()).Line == 7 &&
-			visitor.fset.Position(node.Pos()).Column == 5 {
-			posParent = visitor.parent
-			visitor.shouldRecord = true
+		if visitor.context.fset.Position(node.Pos()).Line == visitor.context.selection.begin.line &&
+			visitor.context.fset.Position(node.Pos()).Column == visitor.context.selection.begin.column {
+			visitor.context.posParent = visitor.parentNode
+			visitor.context.shouldRecord = true
 		}
-		if visitor.shouldRecord {
-			nodesToExtract = append(nodesToExtract, node)
+		if visitor.context.shouldRecord {
+			visitor.context.nodesToExtract = append(visitor.context.nodesToExtract, node)
 		}
-		if visitor.fset.Position(node.End()).Line == 7 &&
-			visitor.fset.Position(node.End()).Column == 6 {
-			endParent = visitor.parent
-			visitor.shouldRecord = false
+		if visitor.context.fset.Position(node.End()).Line == visitor.context.selection.end.line &&
+			visitor.context.fset.Position(node.End()).Column == visitor.context.selection.end.column {
+			visitor.context.endParent = visitor.parentNode
+			visitor.context.shouldRecord = false
 		}
 	}
-	return &parentVisitor{parent: node, fset: visitor.fset}
+	return &astNodeVisitor{
+		parentNode: node,
+		context:    visitor.context,
+	}
 }
 
 func main() {
@@ -64,7 +78,7 @@ func main() {
 	// 	fileSet.Position(astFile.Decls[1].End()),
 	// )
 
-	doExtraction(fileSet, astFile)
+	doExtraction(fileSet, astFile, selection{position{7, 5}, position{7, 6}}, "MyExtractedFunc")
 	createAstFileDump("single_declaration.go.output"+".ast", fileSet, astFile)
 
 	buf := new(bytes.Buffer)
@@ -74,35 +88,38 @@ func main() {
 
 }
 
-func doExtraction(fileSet *token.FileSet, astFile *ast.File) {
+func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection selection, extractedFuncName string) {
 
-	visitor := &parentVisitor{fset: fileSet}
+	visitor := &astNodeVisitor{parentNode: nil, context: &visitorContext{fset: fileSet, selection: selection}}
 	ast.Walk(visitor, astFile)
-	if posParent == endParent {
-		fmt.Println("parent: ")
-		ast.Print(fileSet, posParent)
-		fmt.Println("to extract: ")
-		for _, node := range nodesToExtract {
-			ast.Print(fileSet, node)
-		}
-
+	if visitor.context.posParent != visitor.context.endParent {
+		panic("Selection is not valid")
 	}
+	// if posParent == endParent {
+	// 	fmt.Println("parent: ")
+	// 	ast.Print(fileSet, posParent)
+	// 	fmt.Println("to extract: ")
+	// 	for _, node := range nodesToExtract {
+	// 		ast.Print(fileSet, node)
+	// 	}
+	//
+	// }
 
 	// assume len(nodes) == 1 ==> simple expression:
 
-	extractedExpressionNode := nodesToExtract[0].(ast.Expr)
-	switch posParent.(type) {
+	extractedExpressionNode := visitor.context.nodesToExtract[0].(ast.Expr)
+	switch visitor.context.posParent.(type) {
 	case *ast.AssignStmt:
-		for i, rhs := range posParent.(*ast.AssignStmt).Rhs {
+		for i, rhs := range visitor.context.posParent.(*ast.AssignStmt).Rhs {
 			if rhs == extractedExpressionNode {
-				posParent.(*ast.AssignStmt).Rhs[i] =
-					&ast.CallExpr{Fun: &ast.Ident{Name: "MyExtractedFunc"}}
+				visitor.context.posParent.(*ast.AssignStmt).Rhs[i] =
+					&ast.CallExpr{Fun: &ast.Ident{Name: extractedFuncName}}
 			}
 		}
 		// Add more cases here, e.g. for CallExpr
 	}
 	astFile.Decls = append(astFile.Decls, &ast.FuncDecl{
-		Name: &ast.Ident{Name: "MyExtractedFunc"},
+		Name: &ast.Ident{Name: extractedFuncName},
 		Type: &ast.FuncType{
 			Results: &ast.FieldList{
 				List: []*ast.Field{
