@@ -15,7 +15,6 @@
 package main
 
 import (
-	"fmt"
 	"go/ast"
 	"go/token"
 	"strings"
@@ -80,10 +79,6 @@ func (visitor *astNodeVisitor) Visit(node ast.Node) (w ast.Visitor) {
 // 	fileSet.Position(astFile.Decls[1].Pos()),
 // 	fileSet.Position(astFile.Decls[1].End()),
 // )
-
-func main() {
-	fmt.Println("Dummy")
-}
 
 func ExtractFileToFile(inputFileName string, selection Selection, extractedFuncName string, outputFilename string) {
 	fileSet, astFile := astFromFile(inputFileName)
