@@ -1,13 +1,15 @@
 package main
+
 import (
-"fmt"
+	"fmt"
 )
+
 func main() {
-i :=3
-println(i)
-   fmt.Println(i)
+	i := 3
+	println(i)
+	fmt.Println(i)
 }
 
 func bla(myparam int) int {
-   return 0
+	return 0
 }
