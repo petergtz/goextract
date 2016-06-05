@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"io/ioutil"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -23,17 +24,17 @@ var _ = Describe("Goextract", func() {
 		prefix := strings.TrimSuffix(filename, ".input")
 
 		It("Can extract a "+strings.Replace(prefix, "_", " ", -1), func() {
-			selection, extractedFuncName := selectionFrom("test_data/" + prefix + ".extract")
+			selection, extractedFuncName := extractionDataFrom(filepath.Join("test_data", prefix) + ".extract")
 
-			output := ExtractFileToString("test_data/"+filename, selection, extractedFuncName)
+			actualOutput := ExtractFileToString(filepath.Join("test_data", filename), selection, extractedFuncName)
 
-			Expect(output).To(Equal(util.ReadFileAsStringOrPanic("test_data/" + prefix + ".output")))
+			Expect(actualOutput).To(Equal(expectedOutputFor(prefix)))
 		})
 
 	}
 })
 
-func selectionFrom(filename string) (Selection, string) {
+func extractionDataFrom(filename string) (Selection, string) {
 	parts := strings.Split(strings.TrimRight(util.ReadFileAsStringOrPanic(filename), "\n"), " ")
 	Expect(parts).To(HaveLen(5))
 	return Selection{
@@ -47,4 +48,8 @@ func toInt(s string) int {
 	i, err := strconv.Atoi(s)
 	util.PanicOnError(err)
 	return i
+}
+
+func expectedOutputFor(prefix string) string {
+	return util.ReadFileAsStringOrPanic(filepath.Join("test_data", prefix) + ".output")
 }
