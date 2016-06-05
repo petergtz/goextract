@@ -1,0 +1,5 @@
+package test_data
+
+func f() {
+	i := 3
+}
