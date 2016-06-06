@@ -1,0 +1,9 @@
+package test_data
+
+func f() {
+	i := inner()
+}
+
+func inner() int {
+	return 0
+}

@@ -1,0 +1,12 @@
+package test_data
+
+func f() {
+	i := MyExtractedFunc()
+}
+
+func inner() int {
+	return 0
+}
+func MyExtractedFunc() int {
+	return inner()
+}
