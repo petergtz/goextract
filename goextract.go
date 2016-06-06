@@ -138,17 +138,50 @@ func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection
 			visitor.context.posParent, visitor.context.endParent))
 	}
 	if len(visitor.context.nodesToExtract) == 1 {
-		extractExpression(astFile, visitor.context, extractedFuncName)
+		extractExpression(astFile, fileSet, visitor.context, extractedFuncName)
 	} else {
 		panic("Only expression extractions are supported so far.")
 	}
 
 }
 
-func extractExpression(astFile *ast.File, context *visitorContext, extractedFuncName string) {
+type varListerVisitor struct {
+	fileSet *token.FileSet
+	vars    map[string]string
+}
+
+func (visitor *varListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
+	if typedNode, ok := node.(*ast.Ident); ok && typedNode.Obj.Kind == ast.Var {
+		var typeString string
+		switch typedDecl := typedNode.Obj.Decl.(type) {
+		case *ast.AssignStmt:
+			for i, lhs := range typedDecl.Lhs {
+				if lhs.(*ast.Ident).Name == typedNode.Name {
+					typeString = deduceReturnTypeString(typedDecl.Rhs[i].(ast.Expr))
+				}
+			}
+		default:
+			typeString = "UnresolvedType"
+		}
+		visitor.vars[typedNode.Name] = typeString
+	}
+	return visitor
+}
+
+func listAllUsedIdentifiersThatAreVars(node ast.Node, fileSet *token.FileSet) map[string]string {
+	v := &varListerVisitor{fileSet: fileSet, vars: make(map[string]string)}
+	ast.Walk(v, node)
+	return v.vars
+}
+
+func extractExpression(astFile *ast.File, fileSet *token.FileSet, context *visitorContext, extractedFuncName string) {
 	extractedExpressionNode := context.nodesToExtract[0].(ast.Expr)
 
-	extractExpr := &ast.CallExpr{Fun: &ast.Ident{Name: extractedFuncName}}
+	// TODO: Ideally this would only list variables that are not available
+	// outside of the scope where the expressions lives
+	params := listAllUsedIdentifiersThatAreVars(extractedExpressionNode, fileSet)
+
+	extractExpr := &ast.CallExpr{Fun: &ast.Ident{Name: extractedFuncName}, Args: argsFrom(params)}
 	switch typedNode := context.posParent.(type) {
 	case *ast.AssignStmt:
 		for i, rhs := range typedNode.Rhs {
@@ -162,21 +195,38 @@ func extractExpression(astFile *ast.File, context *visitorContext, extractedFunc
 				typedNode.Args[i] = extractExpr
 			}
 		}
-
 	// TODO:
-	// Add more cases here, e.g. for CallExpr
+	// Add more cases here
 
 	default:
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(context.posParent)))
 	}
 
-	insertExtractedFuncInto(astFile, extractedFuncName, extractedExpressionNode)
+	insertExtractedFuncInto(astFile, extractedFuncName, argsAndTypesFrom(params), extractedExpressionNode)
 }
 
-func insertExtractedFuncInto(astFile *ast.File, extractedFuncName string, extractedExpressionNode ast.Expr) {
+func argsFrom(params map[string]string) (result []ast.Expr) {
+	for key := range params {
+		result = append(result, &ast.Ident{Name: key})
+	}
+	return
+}
+
+func argsAndTypesFrom(params map[string]string) (result []*ast.Field) {
+	for key, val := range params {
+		result = append(result, &ast.Field{Names: []*ast.Ident{&ast.Ident{Name: key}}, Type: &ast.Ident{Name: val}})
+	}
+	return
+}
+
+func insertExtractedFuncInto(astFile *ast.File, extractedFuncName string, argsAndTypes []*ast.Field, extractedExpressionNode ast.Expr) {
 	astFile.Decls = append(astFile.Decls, &ast.FuncDecl{
 		Name: &ast.Ident{Name: extractedFuncName},
+
 		Type: &ast.FuncType{
+			Params: &ast.FieldList{
+				List: argsAndTypes,
+			},
 			Results: &ast.FieldList{
 				List: []*ast.Field{
 					&ast.Field{

@@ -1,0 +1,10 @@
+package test_data
+
+func f() {
+    x := 3
+	i := inner(x)
+}
+
+func inner(y int) int {
+	return 0
+}
