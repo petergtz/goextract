@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"os/exec"
 	"reflect"
 	"strings"
 
@@ -42,39 +43,59 @@ type visitorContext struct {
 	selection Selection
 }
 
-type astNodeVisitor struct {
+type astNodeVisitorForExpressions struct {
 	parentNode ast.Node
 	context    *visitorContext
 }
 
-func (visitor *astNodeVisitor) Visit(node ast.Node) (w ast.Visitor) {
+func (visitor *astNodeVisitorForExpressions) Visit(node ast.Node) (w ast.Visitor) {
 	if node != nil {
 		if visitor.context.fset.Position(node.Pos()).Line == visitor.context.selection.Begin.Line &&
-			visitor.context.fset.Position(node.Pos()).Column == visitor.context.selection.Begin.Column {
-			fmt.Print("The node: ")
-			ast.Print(visitor.context.fset, node)
-			fmt.Print("The pos: ", visitor.context.fset.Position(node.Pos()), "\n")
-			visitor.context.posParent = visitor.parentNode
-			visitor.context.shouldRecord = true
-		}
-		if visitor.context.shouldRecord {
-			visitor.context.nodesToExtract = append(visitor.context.nodesToExtract, node)
-		}
-		if visitor.context.fset.Position(node.End()).Line == visitor.context.selection.End.Line &&
+			visitor.context.fset.Position(node.Pos()).Column == visitor.context.selection.Begin.Column &&
+			visitor.context.fset.Position(node.End()).Line == visitor.context.selection.End.Line &&
 			visitor.context.fset.Position(node.End()).Column == visitor.context.selection.End.Column {
-			fmt.Print("The node: ")
-			ast.Print(visitor.context.fset, node)
-			fmt.Print("The end: ", visitor.context.fset.Position(node.End()), "\n")
+			// fmt.Println("Starting with node at pos", visitor.context.fset.Position(node.Pos()), "and end", visitor.context.fset.Position(node.End()))
+			// ast.Print(visitor.context.fset, node)
+			// fmt.Println(node.Pos(), node)
+			visitor.context.posParent = visitor.parentNode
 			visitor.context.endParent = visitor.parentNode
-			visitor.context.shouldRecord = false
+			visitor.context.nodesToExtract = append(visitor.context.nodesToExtract, node)
 			return nil
 		}
 	}
-	return &astNodeVisitor{
+	return &astNodeVisitorForExpressions{
 		parentNode: node,
 		context:    visitor.context,
 	}
 }
+
+// func (visitor *astNodeVisitorForMultipleStatements) Visit(node ast.Node) (w ast.Visitor) {
+// 	if node != nil {
+// 		if visitor.context.fset.Position(node.Pos()).Line == visitor.context.selection.Begin.Line &&
+// 			visitor.context.fset.Position(node.Pos()).Column == visitor.context.selection.Begin.Column {
+// 			fmt.Println("Starting with node at pos", visitor.context.fset.Position(node.Pos()), "and end", visitor.context.fset.Position(node.End()))
+// 			ast.Print(visitor.context.fset, node)
+// 			fmt.Println(node.Pos(), node)
+// 			visitor.context.posParent = visitor.parentNode
+// 			visitor.context.shouldRecord = true
+// 		}
+// 		if visitor.context.shouldRecord {
+// 			visitor.context.nodesToExtract = append(visitor.context.nodesToExtract, node)
+// 		}
+// 		if visitor.context.fset.Position(node.End()).Line == visitor.context.selection.End.Line &&
+// 			visitor.context.fset.Position(node.End()).Column == visitor.context.selection.End.Column {
+// 			fmt.Println("Ending with node at pos", visitor.context.fset.Position(node.Pos()), "and end", visitor.context.fset.Position(node.End()))
+// 			ast.Print(visitor.context.fset, node)
+// 			visitor.context.endParent = visitor.parentNode
+// 			visitor.context.shouldRecord = false
+// 			return nil
+// 		}
+// 	}
+// 	return &astNodeVisitor{
+// 		parentNode: node,
+// 		context:    visitor.context,
+// 	}
+// }
 
 // 3 cases:
 // 1. Pure expression
@@ -91,6 +112,8 @@ func ExtractFileToFile(inputFileName string, selection Selection, extractedFuncN
 	createAstFileDump(inputFileName+".ast", fileSet, astFile)
 	doExtraction(fileSet, astFile, selection, extractedFuncName)
 	util.WriteFileAsStringOrPanic(outputFilename, stringFrom(fileSet, astFile))
+	err := exec.Command("gofmt", "-w", outputFilename).Run()
+	util.PanicOnError(err)
 }
 
 func ExtractFileToString(inputFileName string, selection Selection, extractedFuncName string) string {
@@ -108,23 +131,12 @@ func ExtractStringToString(input string, selection Selection, extractedFuncName 
 
 func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection, extractedFuncName string) {
 
-	visitor := &astNodeVisitor{parentNode: nil, context: &visitorContext{fset: fileSet, selection: selection}}
+	visitor := &astNodeVisitorForExpressions{parentNode: nil, context: &visitorContext{fset: fileSet, selection: selection}}
 	ast.Walk(visitor, astFile)
 	if visitor.context.posParent != visitor.context.endParent {
 		panic(fmt.Sprintf("Selection is not valid. posParent: %v; endParent: %v",
 			visitor.context.posParent, visitor.context.endParent))
 	}
-	// if posParent == endParent {
-	// 	fmt.Println("parent: ")
-	// 	ast.Print(fileSet, posParent)
-	// 	fmt.Println("to extract: ")
-	// 	for _, node := range nodesToExtract {
-	// 		ast.Print(fileSet, node)
-	// 	}
-	//
-	// }
-
-	// assume len(nodes) == 1 ==> simple expression:
 	if len(visitor.context.nodesToExtract) == 1 {
 		extractExpression(astFile, visitor.context, extractedFuncName)
 	} else {
