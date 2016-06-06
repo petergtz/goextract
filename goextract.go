@@ -147,26 +147,21 @@ func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection
 
 func extractExpression(astFile *ast.File, context *visitorContext, extractedFuncName string) {
 	extractedExpressionNode := context.nodesToExtract[0].(ast.Expr)
-	var returnTypeString string
-	switch context.posParent.(type) {
-	case *ast.AssignStmt:
-		assignStmt := context.posParent.(*ast.AssignStmt)
-		for i, rhs := range assignStmt.Rhs {
-			if rhs == extractedExpressionNode {
-				assignStmt.Rhs[i] =
-					&ast.CallExpr{Fun: &ast.Ident{Name: extractedFuncName}}
-			}
-		}
-		returnTypeString = strings.ToLower(extractedExpressionNode.(*ast.BasicLit).Kind.String())
-	case *ast.CallExpr:
-		callExpr := context.posParent.(*ast.CallExpr)
-		for i, arg := range callExpr.Args {
-			if arg == extractedExpressionNode {
-				callExpr.Args[i] = &ast.CallExpr{Fun: &ast.Ident{Name: extractedFuncName}}
 
+	extractExpr := &ast.CallExpr{Fun: &ast.Ident{Name: extractedFuncName}}
+	switch typedNode := context.posParent.(type) {
+	case *ast.AssignStmt:
+		for i, rhs := range typedNode.Rhs {
+			if rhs == extractedExpressionNode {
+				typedNode.Rhs[i] = extractExpr
 			}
 		}
-		returnTypeString = extractedExpressionNode.(*ast.CallExpr).Fun.(*ast.Ident).Obj.Decl.(*ast.FuncDecl).Type.Results.List[0].Type.(*ast.Ident).Name
+	case *ast.CallExpr:
+		for i, arg := range typedNode.Args {
+			if arg == extractedExpressionNode {
+				typedNode.Args[i] = extractExpr
+			}
+		}
 
 	// TODO:
 	// Add more cases here, e.g. for CallExpr
@@ -174,13 +169,18 @@ func extractExpression(astFile *ast.File, context *visitorContext, extractedFunc
 	default:
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(context.posParent)))
 	}
+
+	insertExtractedFuncInto(astFile, extractedFuncName, extractedExpressionNode)
+}
+
+func insertExtractedFuncInto(astFile *ast.File, extractedFuncName string, extractedExpressionNode ast.Expr) {
 	astFile.Decls = append(astFile.Decls, &ast.FuncDecl{
 		Name: &ast.Ident{Name: extractedFuncName},
 		Type: &ast.FuncType{
 			Results: &ast.FieldList{
 				List: []*ast.Field{
 					&ast.Field{
-						Type: &ast.Ident{Name: returnTypeString},
+						Type: &ast.Ident{Name: deduceReturnTypeString(extractedExpressionNode)},
 					},
 				},
 			},
@@ -195,5 +195,15 @@ func extractExpression(astFile *ast.File, context *visitorContext, extractedFunc
 			},
 		},
 	})
+}
 
+func deduceReturnTypeString(expr ast.Expr) string {
+	switch typedExpr := expr.(type) {
+	case *ast.BasicLit:
+		return strings.ToLower(typedExpr.Kind.String())
+	case *ast.CallExpr:
+		return typedExpr.Fun.(*ast.Ident).Obj.Decl.(*ast.FuncDecl).Type.Results.List[0].Type.(*ast.Ident).Name
+	default:
+		return "TODO"
+	}
 }
