@@ -2,11 +2,13 @@ package main_test
 
 import (
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	. "github.com/petergtz/goextract"
+	. "github.com/petergtz/goextract/testutil"
 	"github.com/petergtz/goextract/util"
 
 	. "github.com/onsi/ginkgo"
@@ -26,9 +28,13 @@ var _ = Describe("Goextract", func() {
 		It("Can extract a "+strings.Replace(prefix, "_", " ", -1), func() {
 			selection, extractedFuncName := extractionDataFrom(filepath.Join("test_data", prefix) + ".extract")
 
-			actualOutput := ExtractFileToString(filepath.Join("test_data", filename), selection, extractedFuncName)
+			tmpfile, err := ioutil.TempFile("", "goextract")
+			util.PanicOnError(err)
+			defer os.Remove(tmpfile.Name())
 
-			Expect(actualOutput).To(Equal(expectedOutputFor(prefix)))
+			ExtractFileToFile(filepath.Join("test_data", filename), selection, extractedFuncName, tmpfile.Name())
+
+			Expect(tmpfile.Name()).To(HaveSameContentAs(filepath.Join("test_data", prefix) + ".output"))
 		})
 
 	}
