@@ -1,0 +1,11 @@
+package test_data
+
+func f() {
+	outer(inner())
+}
+
+func outer(dummy int) {}
+
+func inner() int {
+	return 0
+}

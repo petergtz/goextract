@@ -15,8 +15,10 @@
 package main
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
+	"reflect"
 	"strings"
 
 	"github.com/petergtz/goextract/util"
@@ -47,11 +49,11 @@ type astNodeVisitor struct {
 
 func (visitor *astNodeVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	if node != nil {
-		// fmt.Print("The node: ")
-		// ast.Print(visitor.fset, node)
-		// fmt.Print("The pos: ", visitor.fset.Position(node.Pos()).Line, ":", visitor.fset.Position(node.Pos()).Column, "\n")
 		if visitor.context.fset.Position(node.Pos()).Line == visitor.context.selection.Begin.Line &&
 			visitor.context.fset.Position(node.Pos()).Column == visitor.context.selection.Begin.Column {
+			fmt.Print("The node: ")
+			ast.Print(visitor.context.fset, node)
+			fmt.Print("The pos: ", visitor.context.fset.Position(node.Pos()), "\n")
 			visitor.context.posParent = visitor.parentNode
 			visitor.context.shouldRecord = true
 		}
@@ -60,8 +62,12 @@ func (visitor *astNodeVisitor) Visit(node ast.Node) (w ast.Visitor) {
 		}
 		if visitor.context.fset.Position(node.End()).Line == visitor.context.selection.End.Line &&
 			visitor.context.fset.Position(node.End()).Column == visitor.context.selection.End.Column {
+			fmt.Print("The node: ")
+			ast.Print(visitor.context.fset, node)
+			fmt.Print("The end: ", visitor.context.fset.Position(node.End()), "\n")
 			visitor.context.endParent = visitor.parentNode
 			visitor.context.shouldRecord = false
+			return nil
 		}
 	}
 	return &astNodeVisitor{
@@ -105,7 +111,8 @@ func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection
 	visitor := &astNodeVisitor{parentNode: nil, context: &visitorContext{fset: fileSet, selection: selection}}
 	ast.Walk(visitor, astFile)
 	if visitor.context.posParent != visitor.context.endParent {
-		panic("Selection is not valid")
+		panic(fmt.Sprintf("Selection is not valid. posParent: %v; endParent: %v",
+			visitor.context.posParent, visitor.context.endParent))
 	}
 	// if posParent == endParent {
 	// 	fmt.Println("parent: ")
@@ -128,15 +135,32 @@ func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection
 
 func extractExpression(astFile *ast.File, context *visitorContext, extractedFuncName string) {
 	extractedExpressionNode := context.nodesToExtract[0].(ast.Expr)
+	var returnTypeString string
 	switch context.posParent.(type) {
 	case *ast.AssignStmt:
-		for i, rhs := range context.posParent.(*ast.AssignStmt).Rhs {
+		assignStmt := context.posParent.(*ast.AssignStmt)
+		for i, rhs := range assignStmt.Rhs {
 			if rhs == extractedExpressionNode {
-				context.posParent.(*ast.AssignStmt).Rhs[i] =
+				assignStmt.Rhs[i] =
 					&ast.CallExpr{Fun: &ast.Ident{Name: extractedFuncName}}
 			}
 		}
-		// Add more cases here, e.g. for CallExpr
+		returnTypeString = strings.ToLower(extractedExpressionNode.(*ast.BasicLit).Kind.String())
+	case *ast.CallExpr:
+		callExpr := context.posParent.(*ast.CallExpr)
+		for i, arg := range callExpr.Args {
+			if arg == extractedExpressionNode {
+				callExpr.Args[i] = &ast.CallExpr{Fun: &ast.Ident{Name: extractedFuncName}}
+
+			}
+		}
+		returnTypeString = extractedExpressionNode.(*ast.CallExpr).Fun.(*ast.Ident).Obj.Decl.(*ast.FuncDecl).Type.Results.List[0].Type.(*ast.Ident).Name
+
+	// TODO:
+	// Add more cases here, e.g. for CallExpr
+
+	default:
+		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(context.posParent)))
 	}
 	astFile.Decls = append(astFile.Decls, &ast.FuncDecl{
 		Name: &ast.Ident{Name: extractedFuncName},
@@ -144,7 +168,7 @@ func extractExpression(astFile *ast.File, context *visitorContext, extractedFunc
 			Results: &ast.FieldList{
 				List: []*ast.Field{
 					&ast.Field{
-						Type: &ast.Ident{Name: strings.ToLower(extractedExpressionNode.(*ast.BasicLit).Kind.String())},
+						Type: &ast.Ident{Name: returnTypeString},
 					},
 				},
 			},
