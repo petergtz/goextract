@@ -174,14 +174,21 @@ func listAllUsedIdentifiersThatAreVars(node ast.Node, fileSet *token.FileSet) ma
 	return v.vars
 }
 
-func extractExpression(astFile *ast.File, fileSet *token.FileSet, context *visitorContext, extractedFuncName string) {
+func extractExpression(
+	astFile *ast.File,
+	fileSet *token.FileSet,
+	context *visitorContext,
+	extractedFuncName string) {
 	extractedExpressionNode := context.nodesToExtract[0].(ast.Expr)
 
 	// TODO: Ideally this would only list variables that are not available
 	// outside of the scope where the expressions lives
 	params := listAllUsedIdentifiersThatAreVars(extractedExpressionNode, fileSet)
 
-	extractExpr := &ast.CallExpr{Fun: &ast.Ident{Name: extractedFuncName}, Args: argsFrom(params)}
+	extractExpr := &ast.CallExpr{
+		Fun:  ast.NewIdent(extractedFuncName),
+		Args: argsFrom(params),
+	}
 	switch typedNode := context.posParent.(type) {
 	case *ast.AssignStmt:
 		for i, rhs := range typedNode.Rhs {
@@ -201,27 +208,38 @@ func extractExpression(astFile *ast.File, fileSet *token.FileSet, context *visit
 	default:
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(context.posParent)))
 	}
-
-	insertExtractedFuncInto(astFile, extractedFuncName, argsAndTypesFrom(params), extractedExpressionNode)
+	insertExtractedFuncInto(
+		astFile,
+		extractedFuncName,
+		argsAndTypesFrom(params),
+		extractedExpressionNode)
 }
 
 func argsFrom(params map[string]string) (result []ast.Expr) {
 	for key := range params {
-		result = append(result, &ast.Ident{Name: key})
+		result = append(result, ast.NewIdent(key))
 	}
 	return
 }
 
 func argsAndTypesFrom(params map[string]string) (result []*ast.Field) {
 	for key, val := range params {
-		result = append(result, &ast.Field{Names: []*ast.Ident{&ast.Ident{Name: key}}, Type: &ast.Ident{Name: val}})
+		result = append(result, &ast.Field{
+			Names: []*ast.Ident{ast.NewIdent(key)},
+			Type:  ast.NewIdent(val),
+		})
 	}
 	return
 }
 
-func insertExtractedFuncInto(astFile *ast.File, extractedFuncName string, argsAndTypes []*ast.Field, extractedExpressionNode ast.Expr) {
+func insertExtractedFuncInto(
+	astFile *ast.File,
+	extractedFuncName string,
+	argsAndTypes []*ast.Field,
+	extractedExpressionNode ast.Expr) {
+
 	astFile.Decls = append(astFile.Decls, &ast.FuncDecl{
-		Name: &ast.Ident{Name: extractedFuncName},
+		Name: ast.NewIdent(extractedFuncName),
 
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
@@ -230,7 +248,7 @@ func insertExtractedFuncInto(astFile *ast.File, extractedFuncName string, argsAn
 			Results: &ast.FieldList{
 				List: []*ast.Field{
 					&ast.Field{
-						Type: &ast.Ident{Name: deduceReturnTypeString(extractedExpressionNode)},
+						Type: ast.NewIdent(deduceReturnTypeString(extractedExpressionNode)),
 					},
 				},
 			},
