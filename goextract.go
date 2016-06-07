@@ -69,33 +69,43 @@ func (visitor *astNodeVisitorForExpressions) Visit(node ast.Node) (w ast.Visitor
 	}
 }
 
-// func (visitor *astNodeVisitorForMultipleStatements) Visit(node ast.Node) (w ast.Visitor) {
-// 	if node != nil {
-// 		if visitor.context.fset.Position(node.Pos()).Line == visitor.context.selection.Begin.Line &&
-// 			visitor.context.fset.Position(node.Pos()).Column == visitor.context.selection.Begin.Column {
-// 			fmt.Println("Starting with node at pos", visitor.context.fset.Position(node.Pos()), "and end", visitor.context.fset.Position(node.End()))
-// 			ast.Print(visitor.context.fset, node)
-// 			fmt.Println(node.Pos(), node)
-// 			visitor.context.posParent = visitor.parentNode
-// 			visitor.context.shouldRecord = true
-// 		}
-// 		if visitor.context.shouldRecord {
-// 			visitor.context.nodesToExtract = append(visitor.context.nodesToExtract, node)
-// 		}
-// 		if visitor.context.fset.Position(node.End()).Line == visitor.context.selection.End.Line &&
-// 			visitor.context.fset.Position(node.End()).Column == visitor.context.selection.End.Column {
-// 			fmt.Println("Ending with node at pos", visitor.context.fset.Position(node.Pos()), "and end", visitor.context.fset.Position(node.End()))
-// 			ast.Print(visitor.context.fset, node)
-// 			visitor.context.endParent = visitor.parentNode
-// 			visitor.context.shouldRecord = false
-// 			return nil
-// 		}
-// 	}
-// 	return &astNodeVisitor{
-// 		parentNode: node,
-// 		context:    visitor.context,
-// 	}
-// }
+type astNodeVisitorForMultipleStatements struct {
+	parentNode ast.Node
+	context    *visitorContext
+}
+
+func (visitor *astNodeVisitorForMultipleStatements) Visit(node ast.Node) (w ast.Visitor) {
+	if node != nil {
+		if visitor.context.fset.Position(node.Pos()).Line == visitor.context.selection.Begin.Line &&
+			visitor.context.fset.Position(node.Pos()).Column == visitor.context.selection.Begin.Column &&
+			!visitor.context.shouldRecord {
+			fmt.Println("Starting with node at pos", visitor.context.fset.Position(node.Pos()), "and end", visitor.context.fset.Position(node.End()))
+			ast.Print(visitor.context.fset, node)
+			fmt.Println(node.Pos(), node)
+			fmt.Println("Parent")
+			ast.Print(visitor.context.fset, visitor.parentNode)
+			visitor.context.posParent = visitor.parentNode
+			visitor.context.shouldRecord = true
+		}
+		if visitor.context.shouldRecord && visitor.context.posParent == visitor.parentNode {
+			visitor.context.nodesToExtract = append(visitor.context.nodesToExtract, node)
+		}
+		if visitor.context.fset.Position(node.End()).Line == visitor.context.selection.End.Line &&
+			visitor.context.fset.Position(node.End()).Column == visitor.context.selection.End.Column {
+			fmt.Println("Ending with node at pos", visitor.context.fset.Position(node.Pos()), "and end", visitor.context.fset.Position(node.End()))
+			ast.Print(visitor.context.fset, node)
+			fmt.Println("Parent")
+			ast.Print(visitor.context.fset, visitor.parentNode)
+			visitor.context.endParent = visitor.parentNode
+			visitor.context.shouldRecord = false
+			return nil
+		}
+	}
+	return &astNodeVisitorForMultipleStatements{
+		parentNode: node,
+		context:    visitor.context,
+	}
+}
 
 // 3 cases:
 // 1. Pure expression
@@ -133,14 +143,24 @@ func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection
 
 	visitor := &astNodeVisitorForExpressions{parentNode: nil, context: &visitorContext{fset: fileSet, selection: selection}}
 	ast.Walk(visitor, astFile)
-	if visitor.context.posParent != visitor.context.endParent {
-		panic(fmt.Sprintf("Selection is not valid. posParent: %v; endParent: %v",
-			visitor.context.posParent, visitor.context.endParent))
+	context := visitor.context
+	if len(context.nodesToExtract) == 0 {
+		v := &astNodeVisitorForMultipleStatements{parentNode: nil, context: &visitorContext{fset: fileSet, selection: selection}}
+		ast.Walk(v, astFile)
+		context = v.context
 	}
-	if len(visitor.context.nodesToExtract) == 1 {
-		extractExpression(astFile, fileSet, visitor.context, extractedFuncName)
+	if context.posParent != context.endParent {
+		panic(fmt.Sprintf("Selection is not valid. posParent: %v; endParent: %v",
+			context.posParent, context.endParent))
+	}
+	if context.posParent == nil {
+		panic(fmt.Sprintf("Selection is not valid. posParent: %v; endParent: %v",
+			context.posParent, context.endParent))
+	}
+	if len(context.nodesToExtract) == 1 {
+		extractExpression(astFile, fileSet, context, extractedFuncName)
 	} else {
-		panic("Only expression extractions are supported so far.")
+		extractMultipleStatements(astFile, fileSet, context, extractedFuncName)
 	}
 
 }
@@ -215,6 +235,49 @@ func extractExpression(
 		extractedExpressionNode)
 }
 
+func extractMultipleStatements(
+	astFile *ast.File,
+	fileSet *token.FileSet,
+	context *visitorContext,
+	extractedFuncName string) {
+
+	extractedExpressionNodes := make(map[ast.Node]bool)
+	for _, node := range context.nodesToExtract {
+		extractedExpressionNodes[node] = true
+	}
+
+	extractExpr := &ast.ExprStmt{X: &ast.CallExpr{
+		Fun: ast.NewIdent(extractedFuncName),
+		// Args: argsFrom(params),
+	}}
+	switch typedNode := context.posParent.(type) {
+	case *ast.BlockStmt:
+
+		replaced := false
+		for i, stmt := range typedNode.List {
+			if extractedExpressionNodes[stmt] {
+				if !replaced {
+					typedNode.List[i] = extractExpr
+					replaced = true
+				} else {
+					typedNode.List = append(typedNode.List[:i], typedNode.List[i+1:]...)
+				}
+			}
+		}
+	// TODO:
+	// Add more cases here
+
+	default:
+		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(context.posParent)))
+	}
+	insertExtractedStmtFuncInto(
+		astFile,
+		fileSet,
+		extractedFuncName,
+		nil,
+		context.nodesToExtract)
+}
+
 func argsFrom(params map[string]string) (result []ast.Expr) {
 	for key := range params {
 		result = append(result, ast.NewIdent(key))
@@ -261,6 +324,31 @@ func insertExtractedFuncInto(
 					},
 				},
 			},
+		},
+	})
+}
+
+func insertExtractedStmtFuncInto(
+
+	astFile *ast.File,
+	fileSet *token.FileSet,
+	extractedFuncName string,
+	argsAndTypes []*ast.Field,
+	extractedExpressionNodes []ast.Node) {
+
+	stmts := make([]ast.Stmt, len(extractedExpressionNodes))
+	for i, node := range extractedExpressionNodes {
+		stmts[i] = node.(ast.Stmt)
+	}
+	astFile.Decls = append(astFile.Decls, &ast.FuncDecl{
+		Name: ast.NewIdent(extractedFuncName),
+		Type: &ast.FuncType{
+			Params: &ast.FieldList{
+				List: argsAndTypes,
+			},
+		},
+		Body: &ast.BlockStmt{
+			List: stmts,
 		},
 	})
 }
