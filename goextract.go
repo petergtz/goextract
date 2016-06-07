@@ -188,10 +188,20 @@ func (visitor *varListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	return visitor
 }
 
-func listAllUsedIdentifiersThatAreVars(node ast.Node, fileSet *token.FileSet) map[string]string {
-	v := &varListerVisitor{fileSet: fileSet, vars: make(map[string]string)}
-	ast.Walk(v, node)
-	return v.vars
+func listAllUsedIdentifiersThatAreVars(nodes []ast.Node, fileSet *token.FileSet) map[string]string {
+	result := make(map[string]string)
+	for _, node := range nodes {
+		v := &varListerVisitor{fileSet: fileSet, vars: make(map[string]string)}
+		ast.Walk(v, node)
+		mapStringStringAddAll(result, v.vars)
+	}
+	return result
+}
+
+func mapStringStringAddAll(dst, src map[string]string) {
+	for k, v := range src {
+		dst[k] = v
+	}
 }
 
 func extractExpression(
@@ -199,27 +209,22 @@ func extractExpression(
 	fileSet *token.FileSet,
 	context *visitorContext,
 	extractedFuncName string) {
-	extractedExpressionNode := context.nodesToExtract[0].(ast.Expr)
 
 	// TODO: Ideally this would only list variables that are not available
 	// outside of the scope where the expressions lives
-	params := listAllUsedIdentifiersThatAreVars(extractedExpressionNode, fileSet)
+	params := listAllUsedIdentifiersThatAreVars(context.nodesToExtract, fileSet)
 
-	extractExpr := &ast.CallExpr{
-		Fun:  ast.NewIdent(extractedFuncName),
-		Args: argsFrom(params),
-	}
 	switch typedNode := context.posParent.(type) {
 	case *ast.AssignStmt:
 		for i, rhs := range typedNode.Rhs {
-			if rhs == extractedExpressionNode {
-				typedNode.Rhs[i] = extractExpr
+			if rhs == context.nodesToExtract[0] {
+				typedNode.Rhs[i] = extractExprFrom(extractedFuncName, params)
 			}
 		}
 	case *ast.CallExpr:
 		for i, arg := range typedNode.Args {
-			if arg == extractedExpressionNode {
-				typedNode.Args[i] = extractExpr
+			if arg == context.nodesToExtract[0] {
+				typedNode.Args[i] = extractExprFrom(extractedFuncName, params)
 			}
 		}
 	// TODO:
@@ -234,7 +239,7 @@ func extractExpression(
 		extractedFuncName,
 		argsAndTypesFrom(params),
 		nil,
-		extractedExpressionNode)
+		context.nodesToExtract[0].(ast.Expr))
 }
 
 func extractMultipleStatements(
@@ -242,24 +247,16 @@ func extractMultipleStatements(
 	fileSet *token.FileSet,
 	context *visitorContext,
 	extractedFuncName string) {
+	params := listAllUsedIdentifiersThatAreVars(context.nodesToExtract, fileSet)
 
-	extractedExpressionNodes := make(map[ast.Node]bool)
-	for _, node := range context.nodesToExtract {
-		extractedExpressionNodes[node] = true
-	}
-
-	extractExpr := &ast.ExprStmt{X: &ast.CallExpr{
-		Fun: ast.NewIdent(extractedFuncName),
-		// Args: argsFrom(params),
-	}}
 	switch typedNode := context.posParent.(type) {
 	case *ast.BlockStmt:
-
+		extractedExpressionNodes := astNodeSetFrom(context.nodesToExtract)
 		replaced := false
 		for i, stmt := range typedNode.List {
 			if extractedExpressionNodes[stmt] {
 				if !replaced {
-					typedNode.List[i] = extractExpr
+					typedNode.List[i] = &ast.ExprStmt{X: extractExprFrom(extractedFuncName, params)}
 					replaced = true
 				} else {
 					typedNode.List = append(typedNode.List[:i], typedNode.List[i+1:]...)
@@ -281,10 +278,25 @@ func extractMultipleStatements(
 		astFile,
 		fileSet,
 		extractedFuncName,
-		nil,
+		argsAndTypesFrom(params),
 		stmts,
 		nil,
 	)
+}
+
+func astNodeSetFrom(nodes []ast.Node) map[ast.Node]bool {
+	result := make(map[ast.Node]bool)
+	for _, node := range nodes {
+		result[node] = true
+	}
+	return result
+}
+
+func extractExprFrom(extractedFuncName string, params map[string]string) *ast.CallExpr {
+	return &ast.CallExpr{
+		Fun:  ast.NewIdent(extractedFuncName),
+		Args: argsFrom(params),
+	}
 }
 
 func argsFrom(params map[string]string) (result []ast.Expr) {
