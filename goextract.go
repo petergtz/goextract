@@ -213,6 +213,7 @@ func extractExpression(
 	// TODO: Ideally this would only list variables that are not available
 	// outside of the scope where the expressions lives
 	params := listAllUsedIdentifiersThatAreVars(context.nodesToExtract, fileSet)
+	var stmts []ast.Stmt
 
 	switch typedNode := context.posParent.(type) {
 	case *ast.AssignStmt:
@@ -238,7 +239,7 @@ func extractExpression(
 		fileSet,
 		extractedFuncName,
 		argsAndTypesFrom(params),
-		nil,
+		stmts,
 		context.nodesToExtract[0].(ast.Expr))
 }
 
@@ -248,6 +249,7 @@ func extractMultipleStatements(
 	context *visitorContext,
 	extractedFuncName string) {
 	params := listAllUsedIdentifiersThatAreVars(context.nodesToExtract, fileSet)
+	var stmts []ast.Stmt
 
 	switch typedNode := context.posParent.(type) {
 	case *ast.BlockStmt:
@@ -255,6 +257,7 @@ func extractMultipleStatements(
 		replaced := false
 		for i, stmt := range typedNode.List {
 			if extractedExpressionNodes[stmt] {
+				stmts = append(stmts, stmt)
 				if !replaced {
 					typedNode.List[i] = &ast.ExprStmt{X: extractExprFrom(extractedFuncName, params)}
 					replaced = true
@@ -268,10 +271,6 @@ func extractMultipleStatements(
 
 	default:
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(context.posParent)))
-	}
-	stmts := make([]ast.Stmt, len(context.nodesToExtract))
-	for i, node := range context.nodesToExtract {
-		stmts[i] = node.(ast.Stmt)
 	}
 
 	insertExtractedFuncInto(
