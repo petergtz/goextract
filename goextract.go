@@ -230,8 +230,10 @@ func extractExpression(
 	}
 	insertExtractedFuncInto(
 		astFile,
+		fileSet,
 		extractedFuncName,
 		argsAndTypesFrom(params),
+		nil,
 		extractedExpressionNode)
 }
 
@@ -270,12 +272,19 @@ func extractMultipleStatements(
 	default:
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(context.posParent)))
 	}
-	insertExtractedStmtFuncInto(
+	stmts := make([]ast.Stmt, len(context.nodesToExtract))
+	for i, node := range context.nodesToExtract {
+		stmts[i] = node.(ast.Stmt)
+	}
+
+	insertExtractedFuncInto(
 		astFile,
 		fileSet,
 		extractedFuncName,
 		nil,
-		context.nodesToExtract)
+		stmts,
+		nil,
+	)
 }
 
 func argsFrom(params map[string]string) (result []ast.Expr) {
@@ -297,59 +306,29 @@ func argsAndTypesFrom(params map[string]string) (result []*ast.Field) {
 
 func insertExtractedFuncInto(
 	astFile *ast.File,
-	extractedFuncName string,
-	argsAndTypes []*ast.Field,
-	extractedExpressionNode ast.Expr) {
-
-	astFile.Decls = append(astFile.Decls, &ast.FuncDecl{
-		Name: ast.NewIdent(extractedFuncName),
-
-		Type: &ast.FuncType{
-			Params: &ast.FieldList{
-				List: argsAndTypes,
-			},
-			Results: &ast.FieldList{
-				List: []*ast.Field{
-					&ast.Field{
-						Type: ast.NewIdent(deduceReturnTypeString(extractedExpressionNode)),
-					},
-				},
-			},
-		},
-		Body: &ast.BlockStmt{
-			List: []ast.Stmt{
-				&ast.ReturnStmt{
-					Results: []ast.Expr{
-						extractedExpressionNode,
-					},
-				},
-			},
-		},
-	})
-}
-
-func insertExtractedStmtFuncInto(
-
-	astFile *ast.File,
 	fileSet *token.FileSet,
 	extractedFuncName string,
 	argsAndTypes []*ast.Field,
-	extractedExpressionNodes []ast.Node) {
+	stmts []ast.Stmt,
+	returnExpr ast.Expr) {
 
-	stmts := make([]ast.Stmt, len(extractedExpressionNodes))
-	for i, node := range extractedExpressionNodes {
-		stmts[i] = node.(ast.Stmt)
+	allStmts := make([]ast.Stmt, len(stmts), len(stmts)+1)
+	copy(allStmts, stmts)
+	var returnType *ast.FieldList
+	if returnExpr != nil {
+		allStmts = append(allStmts, &ast.ReturnStmt{Results: []ast.Expr{returnExpr}})
+
+		returnType = &ast.FieldList{List: []*ast.Field{
+			&ast.Field{Type: ast.NewIdent(deduceReturnTypeString(returnExpr))},
+		}}
 	}
 	astFile.Decls = append(astFile.Decls, &ast.FuncDecl{
 		Name: ast.NewIdent(extractedFuncName),
 		Type: &ast.FuncType{
-			Params: &ast.FieldList{
-				List: argsAndTypes,
-			},
+			Params:  &ast.FieldList{List: argsAndTypes},
+			Results: returnType,
 		},
-		Body: &ast.BlockStmt{
-			List: stmts,
-		},
+		Body: &ast.BlockStmt{List: allStmts},
 	})
 }
 
