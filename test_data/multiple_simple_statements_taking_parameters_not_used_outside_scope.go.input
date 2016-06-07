@@ -1,0 +1,12 @@
+package test_data
+
+func g()      {}
+func h(y int) {}
+func i()      {}
+
+func f() {
+	g()
+	x := 3
+	h(x)
+	i()
+}

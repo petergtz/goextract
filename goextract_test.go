@@ -19,7 +19,9 @@ import (
 // A better way could be to actually move the test cases back into this file
 // instead of looping automatically through all test files.
 var focusedTests = map[string]bool{}
-var pendingTests = map[string]bool{}
+var pendingTests = map[string]bool{
+	"multiple_simple_statements_taking_parameters_not_used_outside_scope": true,
+}
 
 var _ = Describe("Goextract", func() {
 	fileInfos, err := ioutil.ReadDir("test_data")
