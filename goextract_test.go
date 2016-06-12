@@ -15,18 +15,34 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+// This is a workaround for the current way of creating test cases.
+// A better way could be to actually move the test cases back into this file
+// instead of looping automatically through all test files.
+var focusedTests = map[string]bool{}
+var pendingTests = map[string]bool{}
+
 var _ = Describe("Goextract", func() {
 	fileInfos, err := ioutil.ReadDir("test_data")
 	util.PanicOnError(err)
 	for _, fileInfo := range fileInfos {
 		filename := fileInfo.Name()
-		if !strings.HasSuffix(filename, ".input") {
+		if !strings.HasSuffix(filename, ".go.input") {
 			continue
 		}
-		prefix := strings.TrimSuffix(filename, ".input")
+		prefix := strings.TrimSuffix(filename, ".go.input")
 
-		It("Can extract a "+strings.Replace(prefix, "_", " ", -1), func() {
-			selection, extractedFuncName := extractionDataFrom(filepath.Join("test_data", prefix) + ".extract")
+		it := It
+		if pendingTests[filepath.Base(prefix)] {
+			// TODO ideally this would use PIt to do better reporting, but it actually
+			// has a differnt method signature.
+			continue
+		}
+		if focusedTests[filepath.Base(prefix)] {
+			it = FIt
+		}
+
+		it("Can extract a "+strings.Replace(prefix, "_", " ", -1), func() {
+			selection, extractedFuncName := extractionDataFrom(filepath.Join("test_data", prefix) + ".go.extract")
 
 			tmpfile, err := ioutil.TempFile("", "goextract")
 			util.PanicOnError(err)
@@ -34,9 +50,8 @@ var _ = Describe("Goextract", func() {
 
 			ExtractFileToFile(filepath.Join("test_data", filename), selection, extractedFuncName, tmpfile.Name())
 
-			Expect(tmpfile.Name()).To(HaveSameContentAs(filepath.Join("test_data", prefix) + ".output"))
+			Expect(tmpfile.Name()).To(HaveSameContentAs(filepath.Join("test_data", prefix) + ".go.output"))
 		})
-
 	}
 })
 
