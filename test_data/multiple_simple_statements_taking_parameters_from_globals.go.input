@@ -4,10 +4,10 @@ func g()      {}
 func h(y int) {}
 func i()      {}
 
-func f() {
-	x := 3
-	g()
-	MyExtractedFunc(x)
+var x = 3
 
+func f() {
+	g()
+	h(x)
+	i()
 }
-func MyExtractedFunc(x int) { h(x); i() }

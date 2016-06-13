@@ -169,7 +169,7 @@ func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection
 
 type varListerVisitor struct {
 	fileSet *token.FileSet
-	vars    map[string]string
+	vars    map[*ast.Ident]string
 }
 
 func (visitor *varListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
@@ -186,22 +186,22 @@ func (visitor *varListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
 		default:
 			typeString = "UnresolvedType"
 		}
-		visitor.vars[typedNode.Name] = typeString
+		visitor.vars[typedNode] = typeString
 	}
 	return visitor
 }
 
-func listAllUsedIdentifiersThatAreVars(nodes []ast.Node, fileSet *token.FileSet) map[string]string {
-	result := make(map[string]string)
+func listAllUsedIdentifiersThatAreVars(nodes []ast.Node, fileSet *token.FileSet) map[*ast.Ident]string {
+	result := make(map[*ast.Ident]string)
 	for _, node := range nodes {
-		v := &varListerVisitor{fileSet: fileSet, vars: make(map[string]string)}
+		v := &varListerVisitor{fileSet: fileSet, vars: make(map[*ast.Ident]string)}
 		ast.Walk(v, node)
-		mapStringStringAddAll(result, v.vars)
+		mapAstIdentStringAddAll(result, v.vars)
 	}
 	return result
 }
 
-func mapStringStringAddAll(dst, src map[string]string) {
+func mapAstIdentStringAddAll(dst, src map[*ast.Ident]string) {
 	for k, v := range src {
 		dst[k] = v
 	}
@@ -215,7 +215,7 @@ func extractExpression(
 
 	// TODO: Ideally this would only list variables that are not available
 	// outside of the scope where the expressions lives
-	params := listAllUsedIdentifiersThatAreVars(context.nodesToExtract, fileSet)
+	params := filterLocalVars(listAllUsedIdentifiersThatAreVars(context.nodesToExtract, fileSet))
 	var stmts []ast.Stmt
 
 	switch typedNode := context.posParent.(type) {
@@ -247,6 +247,10 @@ func extractExpression(
 		argsAndTypesFrom(params),
 		stmts,
 		context.nodesToExtract[0].(ast.Expr))
+}
+
+func filterLocalVars(vars map[*ast.Ident]string) map[*ast.Ident]string {
+	return vars
 }
 
 func extractMultipleStatements(
@@ -296,24 +300,24 @@ func astNodeSetFrom(nodes []ast.Node) map[ast.Node]bool {
 	return result
 }
 
-func extractExprFrom(extractedFuncName string, params map[string]string) *ast.CallExpr {
+func extractExprFrom(extractedFuncName string, params map[*ast.Ident]string) *ast.CallExpr {
 	return &ast.CallExpr{
 		Fun:  ast.NewIdent(extractedFuncName),
 		Args: argsFrom(params),
 	}
 }
 
-func argsFrom(params map[string]string) (result []ast.Expr) {
+func argsFrom(params map[*ast.Ident]string) (result []ast.Expr) {
 	for key := range params {
-		result = append(result, ast.NewIdent(key))
+		result = append(result, key)
 	}
 	return
 }
 
-func argsAndTypesFrom(params map[string]string) (result []*ast.Field) {
+func argsAndTypesFrom(params map[*ast.Ident]string) (result []*ast.Field) {
 	for key, val := range params {
 		result = append(result, &ast.Field{
-			Names: []*ast.Ident{ast.NewIdent(key)},
+			Names: []*ast.Ident{key},
 			Type:  ast.NewIdent(val),
 		})
 	}
