@@ -272,8 +272,7 @@ func extractMultipleStatements(
 				}
 			}
 		}
-	// TODO:
-	// Add more cases here
+	// TODO: Add cases for CommClause and CaseClause here
 
 	default:
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(context.posParent)))
