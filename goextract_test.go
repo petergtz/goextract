@@ -18,7 +18,9 @@ import (
 // This is a workaround for the current way of creating test cases.
 // A better way could be to actually move the test cases back into this file
 // instead of looping automatically through all test files.
-var focusedTests = map[string]bool{}
+var focusedTests = map[string]bool{
+	"one_simple_statement": true,
+}
 var pendingTests = map[string]bool{
 	"multiple_simple_statements_taking_parameters_not_used_outside_scope": true,
 }
