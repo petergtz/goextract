@@ -1,0 +1,15 @@
+package test_data
+
+func g() {}
+func h() {}
+func i() {}
+
+func f() {
+	g()
+	MyExtractedFunc()
+
+	i()
+}
+func MyExtractedFunc() {
+	h()
+}

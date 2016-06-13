@@ -50,10 +50,12 @@ type astNodeVisitorForExpressions struct {
 
 func (visitor *astNodeVisitorForExpressions) Visit(node ast.Node) (w ast.Visitor) {
 	if node != nil {
+		_, isExpr := node.(ast.Expr)
 		if visitor.context.fset.Position(node.Pos()).Line == visitor.context.selection.Begin.Line &&
 			visitor.context.fset.Position(node.Pos()).Column == visitor.context.selection.Begin.Column &&
 			visitor.context.fset.Position(node.End()).Line == visitor.context.selection.End.Line &&
-			visitor.context.fset.Position(node.End()).Column == visitor.context.selection.End.Column {
+			visitor.context.fset.Position(node.End()).Column == visitor.context.selection.End.Column &&
+			isExpr {
 			// fmt.Println("Starting with node at pos", visitor.context.fset.Position(node.Pos()), "and end", visitor.context.fset.Position(node.End()))
 			// ast.Print(visitor.context.fset, node)
 			// fmt.Println(node.Pos(), node)
@@ -229,6 +231,9 @@ func extractExpression(
 				typedNode.Args[i] = extractExprFrom(extractedFuncName, params)
 			}
 		}
+	case *ast.ExprStmt:
+		typedNode.X = extractExprFrom(extractedFuncName, params)
+
 	// TODO:
 	// Add more cases here
 
@@ -328,10 +333,14 @@ func insertExtractedFuncInto(
 	copy(allStmts, stmts)
 	var returnType *ast.FieldList
 	if returnExpr != nil {
-		allStmts = append(allStmts, &ast.ReturnStmt{Results: []ast.Expr{returnExpr}})
-
+		returnTypeString := deduceReturnTypeString(returnExpr)
+		if returnTypeString == "" {
+			allStmts = append(allStmts, &ast.ExprStmt{X: returnExpr})
+		} else {
+			allStmts = append(allStmts, &ast.ReturnStmt{Results: []ast.Expr{returnExpr}})
+		}
 		returnType = &ast.FieldList{List: []*ast.Field{
-			&ast.Field{Type: ast.NewIdent(deduceReturnTypeString(returnExpr))},
+			&ast.Field{Type: ast.NewIdent(returnTypeString)},
 		}}
 	}
 	astFile.Decls = append(astFile.Decls, &ast.FuncDecl{
@@ -349,7 +358,14 @@ func deduceReturnTypeString(expr ast.Expr) string {
 	case *ast.BasicLit:
 		return strings.ToLower(typedExpr.Kind.String())
 	case *ast.CallExpr:
-		return typedExpr.Fun.(*ast.Ident).Obj.Decl.(*ast.FuncDecl).Type.Results.List[0].Type.(*ast.Ident).Name
+		if typedExpr.Fun.(*ast.Ident).Obj.Decl.(*ast.FuncDecl).Type.Results == nil {
+			return ""
+		}
+		result := ""
+		for _, res := range typedExpr.Fun.(*ast.Ident).Obj.Decl.(*ast.FuncDecl).Type.Results.List {
+			result += " " + res.Type.(*ast.Ident).Name
+		}
+		return result
 	default:
 		return "TODO"
 	}
