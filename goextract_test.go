@@ -21,7 +21,6 @@ import (
 var focusedTests = map[string]bool{}
 var pendingTests = map[string]bool{
 	"multiple_simple_statements_taking_parameters_not_used_outside_scope": true,
-	"multiple_simple_statements_taking_parameters_from_globals":           true,
 }
 
 var _ = Describe("Goextract", func() {

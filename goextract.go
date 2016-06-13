@@ -169,7 +169,7 @@ func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection
 
 type varListerVisitor struct {
 	fileSet *token.FileSet
-	vars    map[*ast.Ident]string
+	vars    map[string]string
 }
 
 func (visitor *varListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
@@ -186,24 +186,30 @@ func (visitor *varListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
 		default:
 			typeString = "UnresolvedType"
 		}
-		visitor.vars[typedNode] = typeString
+		visitor.vars[typedNode.Name] = typeString
 	}
 	return visitor
 }
 
-func listAllUsedIdentifiersThatAreVars(nodes []ast.Node, fileSet *token.FileSet) map[*ast.Ident]string {
-	result := make(map[*ast.Ident]string)
+func listAllUsedIdentifiersThatAreVars(nodes []ast.Node, fileSet *token.FileSet) map[string]string {
+	result := make(map[string]string)
 	for _, node := range nodes {
-		v := &varListerVisitor{fileSet: fileSet, vars: make(map[*ast.Ident]string)}
+		v := &varListerVisitor{fileSet: fileSet, vars: make(map[string]string)}
 		ast.Walk(v, node)
-		mapAstIdentStringAddAll(result, v.vars)
+		mapStringStringAddAll(result, v.vars)
 	}
 	return result
 }
 
-func mapAstIdentStringAddAll(dst, src map[*ast.Ident]string) {
+func mapStringStringAddAll(dst, src map[string]string) {
 	for k, v := range src {
 		dst[k] = v
+	}
+}
+
+func mapStringStringRemoveKeys(m map[string]string, keys []string) {
+	for _, key := range keys {
+		delete(m, key)
 	}
 }
 
@@ -213,9 +219,8 @@ func extractExpression(
 	context *visitorContext,
 	extractedFuncName string) {
 
-	// TODO: Ideally this would only list variables that are not available
-	// outside of the scope where the expressions lives
-	params := filterLocalVars(listAllUsedIdentifiersThatAreVars(context.nodesToExtract, fileSet))
+	params := listAllUsedIdentifiersThatAreVars(context.nodesToExtract, fileSet)
+	mapStringStringRemoveKeys(params, listGlobalVarIdentifiers(astFile, fileSet))
 	var stmts []ast.Stmt
 
 	switch typedNode := context.posParent.(type) {
@@ -249,8 +254,33 @@ func extractExpression(
 		context.nodesToExtract[0].(ast.Expr))
 }
 
-func filterLocalVars(vars map[*ast.Ident]string) map[*ast.Ident]string {
-	return vars
+func listGlobalVarIdentifiers(astFile *ast.File, fileSet *token.FileSet) []string {
+	v := &globalVarListerVisitor{fileSet: fileSet}
+	ast.Walk(v, astFile)
+	return v.vars
+}
+
+type globalVarListerVisitor struct {
+	fileSet *token.FileSet
+	vars    []string
+}
+
+func (visitor *globalVarListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
+	switch typedNode := node.(type) {
+	case *ast.FuncDecl:
+		return nil
+	case *ast.GenDecl:
+		if typedNode.Tok.String() == "var" {
+			for _, spec := range typedNode.Specs {
+				for _, name := range spec.(*ast.ValueSpec).Names {
+					visitor.vars = append(visitor.vars, name.Name)
+				}
+			}
+		}
+		return visitor
+	default:
+		return visitor
+	}
 }
 
 func extractMultipleStatements(
@@ -259,6 +289,8 @@ func extractMultipleStatements(
 	context *visitorContext,
 	extractedFuncName string) {
 	params := listAllUsedIdentifiersThatAreVars(context.nodesToExtract, fileSet)
+	mapStringStringRemoveKeys(params, listGlobalVarIdentifiers(astFile, fileSet))
+
 	var stmts []ast.Stmt
 
 	switch typedNode := context.posParent.(type) {
@@ -300,24 +332,24 @@ func astNodeSetFrom(nodes []ast.Node) map[ast.Node]bool {
 	return result
 }
 
-func extractExprFrom(extractedFuncName string, params map[*ast.Ident]string) *ast.CallExpr {
+func extractExprFrom(extractedFuncName string, params map[string]string) *ast.CallExpr {
 	return &ast.CallExpr{
 		Fun:  ast.NewIdent(extractedFuncName),
 		Args: argsFrom(params),
 	}
 }
 
-func argsFrom(params map[*ast.Ident]string) (result []ast.Expr) {
+func argsFrom(params map[string]string) (result []ast.Expr) {
 	for key := range params {
-		result = append(result, key)
+		result = append(result, ast.NewIdent(key))
 	}
 	return
 }
 
-func argsAndTypesFrom(params map[*ast.Ident]string) (result []*ast.Field) {
+func argsAndTypesFrom(params map[string]string) (result []*ast.Field) {
 	for key, val := range params {
 		result = append(result, &ast.Field{
-			Names: []*ast.Ident{key},
+			Names: []*ast.Ident{ast.NewIdent(key)},
 			Type:  ast.NewIdent(val),
 		})
 	}

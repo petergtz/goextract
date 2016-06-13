@@ -8,4 +8,6 @@ func f() {
 func inner(y int) int {
 	return 0
 }
-func MyExtractedFunc(x int) int { return inner(x) }
+func MyExtractedFunc(x int) int {
+	return inner(x)
+}
