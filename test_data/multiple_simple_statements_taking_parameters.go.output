@@ -10,4 +10,7 @@ func f() {
 	MyExtractedFunc(x)
 
 }
-func MyExtractedFunc(x int) { h(x); i() }
+func MyExtractedFunc(x int) {
+	h(x)
+	i()
+}
