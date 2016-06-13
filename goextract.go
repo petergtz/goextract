@@ -171,7 +171,8 @@ type varListerVisitor struct {
 }
 
 func (visitor *varListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
-	if typedNode, ok := node.(*ast.Ident); ok && typedNode.Obj.Kind == ast.Var {
+	if typedNode, ok := node.(*ast.Ident); ok &&
+		typedNode.Obj != nil && typedNode.Obj.Kind == ast.Var {
 		var typeString string
 		switch typedDecl := typedNode.Obj.Decl.(type) {
 		case *ast.AssignStmt:
