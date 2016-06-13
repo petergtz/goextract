@@ -18,11 +18,10 @@ import (
 // This is a workaround for the current way of creating test cases.
 // A better way could be to actually move the test cases back into this file
 // instead of looping automatically through all test files.
-var focusedTests = map[string]bool{
-	"one_simple_statement": true,
-}
+var focusedTests = map[string]bool{}
 var pendingTests = map[string]bool{
 	"multiple_simple_statements_taking_parameters_not_used_outside_scope": true,
+	"multiple_simple_statements_taking_parameters_from_globals":           true,
 }
 
 var _ = Describe("Goextract", func() {
