@@ -19,8 +19,9 @@ import (
 // A better way could be to actually move the test cases back into this file
 // instead of looping automatically through all test files.
 var focusedTests = map[string]bool{}
+
 var pendingTests = map[string]bool{
-	"multiple_simple_statements_taking_parameters_not_used_outside_scope": true,
+	"multiple_simple_statements_taking_parameters_declared_beforehand_changed_within_and_used_afterwards": true,
 }
 
 var _ = Describe("Goextract", func() {

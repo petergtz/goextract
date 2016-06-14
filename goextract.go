@@ -180,7 +180,7 @@ func (visitor *varListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
 		case *ast.AssignStmt:
 			for i, lhs := range typedDecl.Lhs {
 				if lhs.(*ast.Ident).Name == typedNode.Name {
-					typeString = deduceReturnTypeString(typedDecl.Rhs[i].(ast.Expr))
+					typeString = deduceTypeString(typedDecl.Rhs[i].(ast.Expr))
 				}
 			}
 		default:
@@ -218,10 +218,8 @@ func extractExpression(
 	fileSet *token.FileSet,
 	context *visitorContext,
 	extractedFuncName string) {
-
 	params := listAllUsedIdentifiersThatAreVars(context.nodesToExtract, fileSet)
-	mapStringStringRemoveKeys(params, listGlobalVarIdentifiers(astFile, fileSet))
-	var stmts []ast.Stmt
+	mapStringStringRemoveKeys(params, listGlobalVarIdentifiers(astFile))
 
 	switch typedNode := context.posParent.(type) {
 	case *ast.AssignStmt:
@@ -245,24 +243,21 @@ func extractExpression(
 	default:
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(context.posParent)))
 	}
-	insertExtractedFuncInto(
+	insertExtractedExpressionFuncInto(
 		astFile,
-		fileSet,
 		extractedFuncName,
 		argsAndTypesFrom(params),
-		stmts,
 		context.nodesToExtract[0].(ast.Expr))
 }
 
-func listGlobalVarIdentifiers(astFile *ast.File, fileSet *token.FileSet) []string {
-	v := &globalVarListerVisitor{fileSet: fileSet}
+func listGlobalVarIdentifiers(astFile *ast.File) []string {
+	v := &globalVarListerVisitor{}
 	ast.Walk(v, astFile)
 	return v.vars
 }
 
 type globalVarListerVisitor struct {
-	fileSet *token.FileSet
-	vars    []string
+	vars []string
 }
 
 func (visitor *globalVarListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
@@ -283,45 +278,121 @@ func (visitor *globalVarListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	}
 }
 
+func listVarsDeclaredWithin(nodes []ast.Node) map[string]string {
+	v := &varWithinListerVisitor{vars: make(map[string]string)}
+	for _, node := range nodes {
+		ast.Walk(v, node)
+	}
+	return v.vars
+}
+
+type varWithinListerVisitor struct {
+	vars map[string]string
+}
+
+func (visitor *varWithinListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
+	switch typedNode := node.(type) {
+	case *ast.AssignStmt:
+		for i := range typedNode.Lhs {
+			visitor.vars[typedNode.Lhs[i].(*ast.Ident).Name] = deduceTypeString(typedNode.Rhs[i])
+		}
+	}
+	return visitor
+}
+
+func listVarsUsedIn(stmts []ast.Stmt, outOf map[string]string) map[string]string {
+	v := &varsUsedInListerVisitor{vars: make(map[string]string), outOf: outOf}
+	for _, stmt := range stmts {
+		ast.Walk(v, stmt)
+	}
+	return v.vars
+}
+
+type varsUsedInListerVisitor struct {
+	vars  map[string]string
+	outOf map[string]string
+}
+
+func (visitor *varsUsedInListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
+	switch typedNode := node.(type) {
+	case *ast.Ident:
+		if visitor.outOf[typedNode.Name] != "" {
+			visitor.vars[typedNode.Name] = visitor.outOf[typedNode.Name]
+		}
+	}
+	return visitor
+}
+
 func extractMultipleStatements(
 	astFile *ast.File,
 	fileSet *token.FileSet,
 	context *visitorContext,
 	extractedFuncName string) {
 	params := listAllUsedIdentifiersThatAreVars(context.nodesToExtract, fileSet)
-	mapStringStringRemoveKeys(params, listGlobalVarIdentifiers(astFile, fileSet))
+	varsDeclaredWithin := listVarsDeclaredWithin(context.nodesToExtract)
+	mapStringStringRemoveKeys(params, namesOf(varsDeclaredWithin))
+	mapStringStringRemoveKeys(params, listGlobalVarIdentifiers(astFile))
+
+	var varsUsedAfterwards map[string]string
 
 	var stmts []ast.Stmt
 
 	switch typedNode := context.posParent.(type) {
 	case *ast.BlockStmt:
-		extractedExpressionNodes := astNodeSetFrom(context.nodesToExtract)
-		replaced := false
+		var indexOfExtractedStmt int
 		for i, stmt := range typedNode.List {
-			if extractedExpressionNodes[stmt] {
-				stmts = append(stmts, stmt)
-				if !replaced {
-					typedNode.List[i] = &ast.ExprStmt{X: extractExprFrom(extractedFuncName, params)}
-					replaced = true
-				} else {
-					typedNode.List = append(typedNode.List[:i], typedNode.List[i+1:]...)
-				}
+			if stmt == context.nodesToExtract[0] {
+				indexOfExtractedStmt = i
+				break
 			}
 		}
+		varsUsedAfterwards = listVarsUsedIn(typedNode.List[indexOfExtractedStmt+len(context.nodesToExtract):], varsDeclaredWithin)
+		for _, node := range context.nodesToExtract {
+			stmts = append(stmts, node.(ast.Stmt))
+		}
+		if len(varsUsedAfterwards) == 0 {
+			typedNode.List[indexOfExtractedStmt] = &ast.ExprStmt{X: extractExprFrom(extractedFuncName, params)}
+
+		} else {
+			typedNode.List[indexOfExtractedStmt] = &ast.AssignStmt{
+				Lhs: []ast.Expr{ast.NewIdent(namesOf(varsUsedAfterwards)[0])},
+				Tok: token.DEFINE,
+				Rhs: []ast.Expr{extractExprFrom(extractedFuncName, params)},
+			}
+
+		}
+		typedNode.List = append(typedNode.List[:indexOfExtractedStmt+1], typedNode.List[indexOfExtractedStmt+len(context.nodesToExtract):]...)
+
 	// TODO: Add cases for CommClause and CaseClause here
 
 	default:
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(context.posParent)))
 	}
 
-	insertExtractedFuncInto(
+	insertExtractedStmtsFuncInto(
 		astFile,
-		fileSet,
 		extractedFuncName,
 		argsAndTypesFrom(params),
 		stmts,
-		nil,
+		returnExpressionsFrom(varsUsedAfterwards),
 	)
+}
+
+func namesOf(vars map[string]string) []string {
+	result := make([]string, 0, len(vars))
+	for k := range vars {
+		result = append(result, k)
+	}
+	return result
+}
+
+func returnExpressionsFrom(vars map[string]string) []ast.Expr {
+	var result []ast.Expr
+	for k, v := range vars {
+		// TODO not sure this is the right way of creating a identifier + type
+		result = append(result, &ast.Ident{Name: k, Obj: &ast.Object{Type: ast.NewIdent(v)}})
+	}
+	return result
 }
 
 func astNodeSetFrom(nodes []ast.Node) map[ast.Node]bool {
@@ -356,27 +427,19 @@ func argsAndTypesFrom(params map[string]string) (result []*ast.Field) {
 	return
 }
 
-func insertExtractedFuncInto(
+func insertExtractedStmtsFuncInto(
 	astFile *ast.File,
-	fileSet *token.FileSet,
 	extractedFuncName string,
 	argsAndTypes []*ast.Field,
 	stmts []ast.Stmt,
-	returnExpr ast.Expr) {
+	definedVars []ast.Expr) {
 
 	allStmts := make([]ast.Stmt, len(stmts), len(stmts)+1)
 	copy(allStmts, stmts)
 	var returnType *ast.FieldList
-	if returnExpr != nil {
-		returnTypeString := deduceReturnTypeString(returnExpr)
-		if returnTypeString == "" {
-			allStmts = append(allStmts, &ast.ExprStmt{X: returnExpr})
-		} else {
-			allStmts = append(allStmts, &ast.ReturnStmt{Results: []ast.Expr{returnExpr}})
-		}
-		returnType = &ast.FieldList{List: []*ast.Field{
-			&ast.Field{Type: ast.NewIdent(returnTypeString)},
-		}}
+	if len(definedVars) != 0 {
+		allStmts = append(allStmts, &ast.ReturnStmt{Results: definedVars})
+		returnType = &ast.FieldList{List: deduceTypes(definedVars)}
 	}
 	astFile.Decls = append(astFile.Decls, &ast.FuncDecl{
 		Name: ast.NewIdent(extractedFuncName),
@@ -388,7 +451,45 @@ func insertExtractedFuncInto(
 	})
 }
 
-func deduceReturnTypeString(expr ast.Expr) string {
+func insertExtractedExpressionFuncInto(
+	astFile *ast.File,
+	extractedFuncName string,
+	argsAndTypes []*ast.Field,
+	returnExpr ast.Expr) {
+
+	var returnType *ast.FieldList
+	returnTypeString := deduceTypeString(returnExpr)
+	var stmt ast.Stmt
+	if returnTypeString != "" {
+		returnType = &ast.FieldList{List: []*ast.Field{&ast.Field{Type: ast.NewIdent(returnTypeString)}}}
+		stmt = &ast.ReturnStmt{Results: []ast.Expr{returnExpr}}
+	} else {
+		stmt = &ast.ExprStmt{X: returnExpr}
+	}
+
+	astFile.Decls = append(astFile.Decls, &ast.FuncDecl{
+		Name: ast.NewIdent(extractedFuncName),
+		Type: &ast.FuncType{
+			Params:  &ast.FieldList{List: argsAndTypes},
+			Results: returnType,
+		},
+		Body: &ast.BlockStmt{List: []ast.Stmt{stmt}},
+	})
+}
+
+func deduceTypes(exprs []ast.Expr) []*ast.Field {
+	var result []*ast.Field
+	for _, expr := range exprs {
+		returnTypeString := deduceTypeString(expr)
+		if returnTypeString != "" {
+			result = append(result, &ast.Field{Type: ast.NewIdent(returnTypeString)})
+
+		}
+	}
+	return result
+}
+
+func deduceTypeString(expr ast.Expr) string {
 	switch typedExpr := expr.(type) {
 	case *ast.BasicLit:
 		return strings.ToLower(typedExpr.Kind.String())
@@ -401,6 +502,8 @@ func deduceReturnTypeString(expr ast.Expr) string {
 			result += " " + res.Type.(*ast.Ident).Name
 		}
 		return result
+	case *ast.Ident:
+		return typedExpr.Obj.Type.(*ast.Ident).Name
 	default:
 		return "TODO"
 	}

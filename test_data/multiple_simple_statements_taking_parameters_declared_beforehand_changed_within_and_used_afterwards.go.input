@@ -6,11 +6,10 @@ func i()      {}
 
 func f() {
 	g()
-	MyExtractedFunc()
-
-}
-func MyExtractedFunc() {
 	x := 3
 	h(x)
+    x = 2
 	i()
+    y := x
+    _ = y
 }
