@@ -237,6 +237,13 @@ func extractExpression(
 	case *ast.ExprStmt:
 		typedNode.X = extractExprFrom(extractedFuncName, params)
 
+	case *ast.ReturnStmt:
+		for i, result := range typedNode.Results {
+			if result == context.nodesToExtract[0] {
+				typedNode.Results[i] = extractExprFrom(extractedFuncName, params)
+			}
+		}
+
 	// TODO:
 	// Add more cases here
 
@@ -503,8 +510,18 @@ func deduceTypeString(expr ast.Expr) string {
 		}
 		return result
 	case *ast.Ident:
-		return typedExpr.Obj.Type.(*ast.Ident).Name
+		// return typedExpr.Obj.Type.(*ast.Ident).Name
+		return findTypeFor(typedExpr.Obj.Name, typedExpr.Obj.Decl.(*ast.AssignStmt))
 	default:
-		return "TODO"
+		return fmt.Sprintf("UnresolvedType_%T", expr)
 	}
+}
+
+func findTypeFor(name string, assignStmt *ast.AssignStmt) string {
+	for i := range assignStmt.Lhs {
+		if assignStmt.Lhs[i].(*ast.Ident).Name == name {
+			return deduceTypeString(assignStmt.Rhs[i])
+		}
+	}
+	return "UnresolvedType"
 }
