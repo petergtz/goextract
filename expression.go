@@ -40,21 +40,22 @@ func (visitor *astNodeVisitorForExpressions) Visit(node ast.Node) (w ast.Visitor
 func extractExpression(
 	astFile *ast.File,
 	fileSet *token.FileSet,
-	context *visitorContext,
+	expr ast.Expr,
+	parent ast.Node,
 	extractedFuncName string) {
-	params := allUsedIdentsThatAreVars(context.nodesToExtract)
+	params := allUsedIdentsThatAreVars([]ast.Node{expr})
 	util.MapStringStringRemoveKeys(params, globalVars(astFile))
 
-	switch typedNode := context.posParent.(type) {
+	switch typedNode := parent.(type) {
 	case *ast.AssignStmt:
 		for i, rhs := range typedNode.Rhs {
-			if rhs == context.nodesToExtract[0] {
+			if rhs == expr {
 				typedNode.Rhs[i] = extractExprFrom(extractedFuncName, params)
 			}
 		}
 	case *ast.CallExpr:
 		for i, arg := range typedNode.Args {
-			if arg == context.nodesToExtract[0] {
+			if arg == expr {
 				typedNode.Args[i] = extractExprFrom(extractedFuncName, params)
 			}
 		}
@@ -63,7 +64,7 @@ func extractExpression(
 
 	case *ast.ReturnStmt:
 		for i, result := range typedNode.Results {
-			if result == context.nodesToExtract[0] {
+			if result == expr {
 				typedNode.Results[i] = extractExprFrom(extractedFuncName, params)
 			}
 		}
@@ -72,13 +73,13 @@ func extractExpression(
 	// Add more cases here
 
 	default:
-		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(context.posParent)))
+		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(parent)))
 	}
 	insertExtractedExpressionFuncInto(
 		astFile,
 		extractedFuncName,
 		argsAndTypesFrom(params),
-		context.nodesToExtract[0].(ast.Expr))
+		expr)
 }
 
 func insertExtractedExpressionFuncInto(

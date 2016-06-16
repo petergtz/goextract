@@ -103,29 +103,24 @@ func ExtractStringToString(input string, selection Selection, extractedFuncName 
 }
 
 func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection, extractedFuncName string) {
-
 	visitor := &astNodeVisitorForExpressions{parentNode: nil, context: &visitorContext{fset: fileSet, selection: selection}}
 	ast.Walk(visitor, astFile)
 	context := visitor.context
-	if len(context.nodesToExtract) == 0 {
+	if len(context.nodesToExtract) == 1 {
+		extractExpression(astFile, fileSet, context.nodesToExtract[0].(ast.Expr), context.posParent, extractedFuncName)
+	} else {
 		v := &astNodeVisitorForMultipleStatements{parentNode: nil, context: &visitorContext{fset: fileSet, selection: selection}}
 		ast.Walk(v, astFile)
-		context = v.context
+		if v.context.posParent != v.context.endParent {
+			panic(fmt.Sprintf("Selection is not valid. posParent: %v; endParent: %v",
+				v.context.posParent, v.context.endParent))
+		}
+		if v.context.posParent == nil {
+			panic(fmt.Sprintf("Selection is not valid. posParent: %v; endParent: %v",
+				v.context.posParent, v.context.endParent))
+		}
+		extractMultipleStatements(astFile, fileSet, v.context, extractedFuncName)
 	}
-	if context.posParent != context.endParent {
-		panic(fmt.Sprintf("Selection is not valid. posParent: %v; endParent: %v",
-			context.posParent, context.endParent))
-	}
-	if context.posParent == nil {
-		panic(fmt.Sprintf("Selection is not valid. posParent: %v; endParent: %v",
-			context.posParent, context.endParent))
-	}
-	if len(context.nodesToExtract) == 1 {
-		extractExpression(astFile, fileSet, context, extractedFuncName)
-	} else {
-		extractMultipleStatements(astFile, fileSet, context, extractedFuncName)
-	}
-
 }
 
 func globalVars(astFile *ast.File) []string {
