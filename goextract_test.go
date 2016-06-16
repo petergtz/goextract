@@ -21,6 +21,7 @@ import (
 var focusedTests = map[string]bool{}
 
 var pendingTests = map[string]bool{
+	"multiple_simple_statements_taking_parameters_used_afterwards":                                        true,
 	"multiple_simple_statements_taking_parameters_declared_beforehand_changed_within_and_used_afterwards": true,
 }
 

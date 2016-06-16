@@ -109,16 +109,6 @@ func (visitor *astNodeVisitorForMultipleStatements) Visit(node ast.Node) (w ast.
 	}
 }
 
-// 3 cases:
-// 1. Pure expression
-// 2. Pure procedural (implies side effects) -> list of statemtents -> no return value
-// 3. Final assignment to local variable -> list of statements where final is an assignment
-
-// fmt.Println(
-// 	fileSet.Position(astFile.Decls[1].Pos()),
-// 	fileSet.Position(astFile.Decls[1].End()),
-// )
-
 func ExtractFileToFile(inputFileName string, selection Selection, extractedFuncName string, outputFilename string) {
 	fileSet, astFile := astFromFile(inputFileName)
 	createAstFileDump(inputFileName+".ast", fileSet, astFile)
@@ -167,44 +157,27 @@ func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection
 
 }
 
-type varListerVisitor struct {
-	fileSet *token.FileSet
-	vars    map[string]string
-}
-
-func (visitor *varListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
-	if typedNode, ok := node.(*ast.Ident); ok &&
-		typedNode.Obj != nil && typedNode.Obj.Kind == ast.Var {
-		var typeString string
-		switch typedDecl := typedNode.Obj.Decl.(type) {
-		case *ast.AssignStmt:
-			for i, lhs := range typedDecl.Lhs {
-				if lhs.(*ast.Ident).Name == typedNode.Name {
-					typeString = deduceTypeString(typedDecl.Rhs[i].(ast.Expr))
-				}
-			}
-		default:
-			typeString = "UnresolvedType"
-		}
-		visitor.vars[typedNode.Name] = typeString
-	}
-	return visitor
-}
-
-func listAllUsedIdentifiersThatAreVars(nodes []ast.Node, fileSet *token.FileSet) map[string]string {
+func allUsedIdentsThatAreVars(nodes []ast.Node) map[string]string {
 	result := make(map[string]string)
 	for _, node := range nodes {
-		v := &varListerVisitor{fileSet: fileSet, vars: make(map[string]string)}
-		ast.Walk(v, node)
-		mapStringStringAddAll(result, v.vars)
+		ast.Inspect(node, func(node ast.Node) bool {
+			if typedNode, ok := node.(*ast.Ident); ok &&
+				typedNode.Obj != nil && typedNode.Obj.Kind == ast.Var {
+				switch typedDecl := typedNode.Obj.Decl.(type) {
+				case *ast.AssignStmt:
+					for i, lhs := range typedDecl.Lhs {
+						if lhs.(*ast.Ident).Name == typedNode.Name {
+							result[typedNode.Name] = deduceTypeString(typedDecl.Rhs[i].(ast.Expr))
+						}
+					}
+				default:
+					result[typedNode.Name] = "UnresolvedType"
+				}
+			}
+			return true
+		})
 	}
 	return result
-}
-
-func mapStringStringAddAll(dst, src map[string]string) {
-	for k, v := range src {
-		dst[k] = v
-	}
 }
 
 func mapStringStringRemoveKeys(m map[string]string, keys []string) {
@@ -218,8 +191,8 @@ func extractExpression(
 	fileSet *token.FileSet,
 	context *visitorContext,
 	extractedFuncName string) {
-	params := listAllUsedIdentifiersThatAreVars(context.nodesToExtract, fileSet)
-	mapStringStringRemoveKeys(params, listGlobalVarIdentifiers(astFile))
+	params := allUsedIdentsThatAreVars(context.nodesToExtract)
+	mapStringStringRemoveKeys(params, globalVars(astFile))
 
 	switch typedNode := context.posParent.(type) {
 	case *ast.AssignStmt:
@@ -257,77 +230,56 @@ func extractExpression(
 		context.nodesToExtract[0].(ast.Expr))
 }
 
-func listGlobalVarIdentifiers(astFile *ast.File) []string {
-	v := &globalVarListerVisitor{}
-	ast.Walk(v, astFile)
-	return v.vars
-}
-
-type globalVarListerVisitor struct {
-	vars []string
-}
-
-func (visitor *globalVarListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
-	switch typedNode := node.(type) {
-	case *ast.FuncDecl:
-		return nil
-	case *ast.GenDecl:
-		if typedNode.Tok.String() == "var" {
-			for _, spec := range typedNode.Specs {
-				for _, name := range spec.(*ast.ValueSpec).Names {
-					visitor.vars = append(visitor.vars, name.Name)
+func globalVars(astFile *ast.File) []string {
+	var result []string
+	ast.Inspect(astFile, func(node ast.Node) bool {
+		switch typedNode := node.(type) {
+		case *ast.FuncDecl:
+			return false
+		case *ast.GenDecl:
+			if typedNode.Tok.String() == "var" {
+				for _, spec := range typedNode.Specs {
+					for _, name := range spec.(*ast.ValueSpec).Names {
+						result = append(result, name.Name)
+					}
 				}
 			}
+			return true
+		default:
+			return true
 		}
-		return visitor
-	default:
-		return visitor
-	}
+	})
+	return result
 }
 
-func listVarsDeclaredWithin(nodes []ast.Node) map[string]string {
-	v := &varWithinListerVisitor{vars: make(map[string]string)}
+func varsWithTypesDeclaredWithin(nodes []ast.Node) map[string]string {
+	result := make(map[string]string)
 	for _, node := range nodes {
-		ast.Walk(v, node)
+		ast.Inspect(node, func(node ast.Node) bool {
+			if assignStmt, ok := node.(*ast.AssignStmt); ok && assignStmt.Tok.String() == ":=" {
+				for i := range assignStmt.Lhs {
+					result[assignStmt.Lhs[i].(*ast.Ident).Name] = deduceTypeString(assignStmt.Rhs[i])
+				}
+			}
+			return true
+		})
 	}
-	return v.vars
+	return result
 }
 
-type varWithinListerVisitor struct {
-	vars map[string]string
-}
-
-func (visitor *varWithinListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
-	switch typedNode := node.(type) {
-	case *ast.AssignStmt:
-		for i := range typedNode.Lhs {
-			visitor.vars[typedNode.Lhs[i].(*ast.Ident).Name] = deduceTypeString(typedNode.Rhs[i])
-		}
-	}
-	return visitor
-}
-
-func listVarsUsedIn(stmts []ast.Stmt, outOf map[string]string) map[string]string {
-	v := &varsUsedInListerVisitor{vars: make(map[string]string), outOf: outOf}
+func varsWithTypesUsedIn(stmts []ast.Stmt, outOf map[string]string) map[string]string {
+	result := make(map[string]string)
 	for _, stmt := range stmts {
-		ast.Walk(v, stmt)
+		ast.Inspect(stmt, func(node ast.Node) bool {
+			if ident, ok := node.(*ast.Ident); ok {
+				if outOf[ident.Name] != "" {
+					result[ident.Name] = outOf[ident.Name]
+				}
+			}
+			return true
+		})
 	}
-	return v.vars
-}
-
-type varsUsedInListerVisitor struct {
-	vars  map[string]string
-	outOf map[string]string
-}
-
-func (visitor *varsUsedInListerVisitor) Visit(node ast.Node) (w ast.Visitor) {
-	switch typedNode := node.(type) {
-	case *ast.Ident:
-		if visitor.outOf[typedNode.Name] != "" {
-			visitor.vars[typedNode.Name] = visitor.outOf[typedNode.Name]
-		}
-	}
-	return visitor
+	return result
 }
 
 func extractMultipleStatements(
@@ -335,10 +287,10 @@ func extractMultipleStatements(
 	fileSet *token.FileSet,
 	context *visitorContext,
 	extractedFuncName string) {
-	params := listAllUsedIdentifiersThatAreVars(context.nodesToExtract, fileSet)
-	varsDeclaredWithin := listVarsDeclaredWithin(context.nodesToExtract)
+	params := allUsedIdentsThatAreVars(context.nodesToExtract)
+	varsDeclaredWithin := varsWithTypesDeclaredWithin(context.nodesToExtract)
 	mapStringStringRemoveKeys(params, namesOf(varsDeclaredWithin))
-	mapStringStringRemoveKeys(params, listGlobalVarIdentifiers(astFile))
+	mapStringStringRemoveKeys(params, globalVars(astFile))
 
 	var varsUsedAfterwards map[string]string
 
@@ -353,7 +305,7 @@ func extractMultipleStatements(
 				break
 			}
 		}
-		varsUsedAfterwards = listVarsUsedIn(typedNode.List[indexOfExtractedStmt+len(context.nodesToExtract):], varsDeclaredWithin)
+		varsUsedAfterwards = varsWithTypesUsedIn(typedNode.List[indexOfExtractedStmt+len(context.nodesToExtract):], varsDeclaredWithin)
 		for _, node := range context.nodesToExtract {
 			stmts = append(stmts, node.(ast.Stmt))
 		}
