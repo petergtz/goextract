@@ -83,13 +83,13 @@ func extractExpression(
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(parent)))
 	}
 
-	astFile.Decls = append(astFile.Decls, funcDeclWith(
+	astFile.Decls = append(astFile.Decls, singleExprStmtFuncDeclWith(
 		extractedFuncName,
 		fieldsFrom(params),
 		expr))
 }
 
-func funcDeclWith(funcName string, fields []*ast.Field, returnExpr ast.Expr) *ast.FuncDecl {
+func singleExprStmtFuncDeclWith(funcName string, fields []*ast.Field, returnExpr ast.Expr) *ast.FuncDecl {
 
 	var returnType *ast.FieldList
 	returnTypeString := deduceTypeString(returnExpr)

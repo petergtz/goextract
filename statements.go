@@ -105,7 +105,7 @@ func extractMultipleStatements(
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(parentNode)))
 	}
 
-	astFile.Decls = append(astFile.Decls, insertExtractedStmtsFuncInto(
+	astFile.Decls = append(astFile.Decls, multipleStmtFuncDeclWith(
 		extractedFuncName,
 		fieldsFrom(params),
 		stmts,
@@ -113,7 +113,7 @@ func extractMultipleStatements(
 	))
 }
 
-func insertExtractedStmtsFuncInto(
+func multipleStmtFuncDeclWith(
 	extractedFuncName string,
 	fields []*ast.Field,
 	stmts []ast.Stmt,
