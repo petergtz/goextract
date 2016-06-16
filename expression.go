@@ -11,7 +11,15 @@ import (
 
 type astNodeVisitorForExpressions struct {
 	parentNode ast.Node
-	context    *visitorContext
+	context    *expressionVisitorContext
+}
+
+type expressionVisitorContext struct {
+	fset          *token.FileSet
+	parent        ast.Node
+	exprToExtract ast.Expr
+
+	selection Selection
 }
 
 func (visitor *astNodeVisitorForExpressions) Visit(node ast.Node) (w ast.Visitor) {
@@ -25,9 +33,8 @@ func (visitor *astNodeVisitorForExpressions) Visit(node ast.Node) (w ast.Visitor
 			// fmt.Println("Starting with node at pos", visitor.context.fset.Position(node.Pos()), "and end", visitor.context.fset.Position(node.End()))
 			// ast.Print(visitor.context.fset, node)
 			// fmt.Println(node.Pos(), node)
-			visitor.context.posParent = visitor.parentNode
-			visitor.context.endParent = visitor.parentNode
-			visitor.context.nodesToExtract = append(visitor.context.nodesToExtract, node)
+			visitor.context.parent = visitor.parentNode
+			visitor.context.exprToExtract = node.(ast.Expr)
 			return nil
 		}
 	}
@@ -50,22 +57,22 @@ func extractExpression(
 	case *ast.AssignStmt:
 		for i, rhs := range typedNode.Rhs {
 			if rhs == expr {
-				typedNode.Rhs[i] = extractExprFrom(extractedFuncName, params)
+				typedNode.Rhs[i] = callExprWith(extractedFuncName, params)
 			}
 		}
 	case *ast.CallExpr:
 		for i, arg := range typedNode.Args {
 			if arg == expr {
-				typedNode.Args[i] = extractExprFrom(extractedFuncName, params)
+				typedNode.Args[i] = callExprWith(extractedFuncName, params)
 			}
 		}
 	case *ast.ExprStmt:
-		typedNode.X = extractExprFrom(extractedFuncName, params)
+		typedNode.X = callExprWith(extractedFuncName, params)
 
 	case *ast.ReturnStmt:
 		for i, result := range typedNode.Results {
 			if result == expr {
-				typedNode.Results[i] = extractExprFrom(extractedFuncName, params)
+				typedNode.Results[i] = callExprWith(extractedFuncName, params)
 			}
 		}
 
@@ -75,18 +82,14 @@ func extractExpression(
 	default:
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(parent)))
 	}
-	insertExtractedExpressionFuncInto(
-		astFile,
+
+	astFile.Decls = append(astFile.Decls, funcDeclWith(
 		extractedFuncName,
-		argsAndTypesFrom(params),
-		expr)
+		fieldsFrom(params),
+		expr))
 }
 
-func insertExtractedExpressionFuncInto(
-	astFile *ast.File,
-	extractedFuncName string,
-	argsAndTypes []*ast.Field,
-	returnExpr ast.Expr) {
+func funcDeclWith(funcName string, fields []*ast.Field, returnExpr ast.Expr) *ast.FuncDecl {
 
 	var returnType *ast.FieldList
 	returnTypeString := deduceTypeString(returnExpr)
@@ -98,12 +101,12 @@ func insertExtractedExpressionFuncInto(
 		stmt = &ast.ExprStmt{X: returnExpr}
 	}
 
-	astFile.Decls = append(astFile.Decls, &ast.FuncDecl{
-		Name: ast.NewIdent(extractedFuncName),
+	return &ast.FuncDecl{
+		Name: ast.NewIdent(funcName),
 		Type: &ast.FuncType{
-			Params:  &ast.FieldList{List: argsAndTypes},
+			Params:  &ast.FieldList{List: fields},
 			Results: returnType,
 		},
 		Body: &ast.BlockStmt{List: []ast.Stmt{stmt}},
-	})
+	}
 }

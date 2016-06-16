@@ -24,62 +24,6 @@ import (
 	"github.com/petergtz/goextract/util"
 )
 
-type Selection struct {
-	Begin, End Position
-}
-
-type Position struct {
-	Line, Column int
-}
-
-type visitorContext struct {
-	fset           *token.FileSet
-	posParent      ast.Node
-	endParent      ast.Node
-	nodesToExtract []ast.Node
-	shouldRecord   bool
-
-	selection Selection
-}
-
-type astNodeVisitorForMultipleStatements struct {
-	parentNode ast.Node
-	context    *visitorContext
-}
-
-func (visitor *astNodeVisitorForMultipleStatements) Visit(node ast.Node) (w ast.Visitor) {
-	if node != nil {
-		if visitor.context.fset.Position(node.Pos()).Line == visitor.context.selection.Begin.Line &&
-			visitor.context.fset.Position(node.Pos()).Column == visitor.context.selection.Begin.Column &&
-			!visitor.context.shouldRecord {
-			fmt.Println("Starting with node at pos", visitor.context.fset.Position(node.Pos()), "and end", visitor.context.fset.Position(node.End()))
-			ast.Print(visitor.context.fset, node)
-			fmt.Println(node.Pos(), node)
-			fmt.Println("Parent")
-			ast.Print(visitor.context.fset, visitor.parentNode)
-			visitor.context.posParent = visitor.parentNode
-			visitor.context.shouldRecord = true
-		}
-		if visitor.context.shouldRecord && visitor.context.posParent == visitor.parentNode {
-			visitor.context.nodesToExtract = append(visitor.context.nodesToExtract, node)
-		}
-		if visitor.context.fset.Position(node.End()).Line == visitor.context.selection.End.Line &&
-			visitor.context.fset.Position(node.End()).Column == visitor.context.selection.End.Column {
-			fmt.Println("Ending with node at pos", visitor.context.fset.Position(node.Pos()), "and end", visitor.context.fset.Position(node.End()))
-			ast.Print(visitor.context.fset, node)
-			fmt.Println("Parent")
-			ast.Print(visitor.context.fset, visitor.parentNode)
-			visitor.context.endParent = visitor.parentNode
-			visitor.context.shouldRecord = false
-			return nil
-		}
-	}
-	return &astNodeVisitorForMultipleStatements{
-		parentNode: node,
-		context:    visitor.context,
-	}
-}
-
 func ExtractFileToFile(inputFileName string, selection Selection, extractedFuncName string, outputFilename string) {
 	fileSet, astFile := astFromFile(inputFileName)
 	createAstFileDump(inputFileName+".ast", fileSet, astFile)
@@ -103,13 +47,12 @@ func ExtractStringToString(input string, selection Selection, extractedFuncName 
 }
 
 func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection, extractedFuncName string) {
-	visitor := &astNodeVisitorForExpressions{parentNode: nil, context: &visitorContext{fset: fileSet, selection: selection}}
+	visitor := &astNodeVisitorForExpressions{parentNode: nil, context: &expressionVisitorContext{fset: fileSet, selection: selection}}
 	ast.Walk(visitor, astFile)
-	context := visitor.context
-	if len(context.nodesToExtract) == 1 {
-		extractExpression(astFile, fileSet, context.nodesToExtract[0].(ast.Expr), context.posParent, extractedFuncName)
+	if visitor.context.exprToExtract != nil {
+		extractExpression(astFile, fileSet, visitor.context.exprToExtract, visitor.context.parent, extractedFuncName)
 	} else {
-		v := &astNodeVisitorForMultipleStatements{parentNode: nil, context: &visitorContext{fset: fileSet, selection: selection}}
+		v := &astNodeVisitorForMultipleStatements{parentNode: nil, context: &multipleStatementVisitorContext{fset: fileSet, selection: selection}}
 		ast.Walk(v, astFile)
 		if v.context.posParent != v.context.endParent {
 			panic(fmt.Sprintf("Selection is not valid. posParent: %v; endParent: %v",
@@ -119,7 +62,7 @@ func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection
 			panic(fmt.Sprintf("Selection is not valid. posParent: %v; endParent: %v",
 				v.context.posParent, v.context.endParent))
 		}
-		extractMultipleStatements(astFile, fileSet, v.context, extractedFuncName)
+		extractMultipleStatements(astFile, fileSet, v.context.nodesToExtract, v.context.posParent, extractedFuncName)
 	}
 }
 
@@ -215,9 +158,9 @@ func returnExpressionsFrom(vars map[string]string) []ast.Expr {
 	return result
 }
 
-func extractExprFrom(extractedFuncName string, params map[string]string) *ast.CallExpr {
+func callExprWith(funcName string, params map[string]string) *ast.CallExpr {
 	return &ast.CallExpr{
-		Fun:  ast.NewIdent(extractedFuncName),
+		Fun:  ast.NewIdent(funcName),
 		Args: argsFrom(params),
 	}
 }
@@ -229,7 +172,7 @@ func argsFrom(params map[string]string) (result []ast.Expr) {
 	return
 }
 
-func argsAndTypesFrom(params map[string]string) (result []*ast.Field) {
+func fieldsFrom(params map[string]string) (result []*ast.Field) {
 	for key, val := range params {
 		result = append(result, &ast.Field{
 			Names: []*ast.Ident{ast.NewIdent(key)},
@@ -245,7 +188,6 @@ func deduceTypes(exprs []ast.Expr) []*ast.Field {
 		returnTypeString := deduceTypeString(expr)
 		if returnTypeString != "" {
 			result = append(result, &ast.Field{Type: ast.NewIdent(returnTypeString)})
-
 		}
 	}
 	return result
