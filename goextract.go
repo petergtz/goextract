@@ -157,29 +157,6 @@ func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection
 
 }
 
-func allUsedIdentsThatAreVars(nodes []ast.Node) map[string]string {
-	result := make(map[string]string)
-	for _, node := range nodes {
-		ast.Inspect(node, func(node ast.Node) bool {
-			if typedNode, ok := node.(*ast.Ident); ok &&
-				typedNode.Obj != nil && typedNode.Obj.Kind == ast.Var {
-				switch typedDecl := typedNode.Obj.Decl.(type) {
-				case *ast.AssignStmt:
-					for i, lhs := range typedDecl.Lhs {
-						if lhs.(*ast.Ident).Name == typedNode.Name {
-							result[typedNode.Name] = deduceTypeString(typedDecl.Rhs[i].(ast.Expr))
-						}
-					}
-				default:
-					result[typedNode.Name] = "UnresolvedType"
-				}
-			}
-			return true
-		})
-	}
-	return result
-}
-
 func mapStringStringRemoveKeys(m map[string]string, keys []string) {
 	for _, key := range keys {
 		delete(m, key)
@@ -259,6 +236,29 @@ func varsWithTypesDeclaredWithin(nodes []ast.Node) map[string]string {
 			if assignStmt, ok := node.(*ast.AssignStmt); ok && assignStmt.Tok.String() == ":=" {
 				for i := range assignStmt.Lhs {
 					result[assignStmt.Lhs[i].(*ast.Ident).Name] = deduceTypeString(assignStmt.Rhs[i])
+				}
+			}
+			return true
+		})
+	}
+	return result
+}
+
+func allUsedIdentsThatAreVars(nodes []ast.Node) map[string]string {
+	result := make(map[string]string)
+	for _, node := range nodes {
+		ast.Inspect(node, func(node ast.Node) bool {
+			if typedNode, ok := node.(*ast.Ident); ok &&
+				typedNode.Obj != nil && typedNode.Obj.Kind == ast.Var {
+				switch typedDecl := typedNode.Obj.Decl.(type) {
+				case *ast.AssignStmt:
+					for i, lhs := range typedDecl.Lhs {
+						if lhs.(*ast.Ident).Name == typedNode.Name {
+							result[typedNode.Name] = deduceTypeString(typedDecl.Rhs[i].(ast.Expr))
+						}
+					}
+				default:
+					result[typedNode.Name] = "UnresolvedType"
 				}
 			}
 			return true
