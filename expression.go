@@ -90,10 +90,11 @@ func extractExpression(
 }
 
 func singleExprStmtFuncDeclWith(funcName string, fields []*ast.Field, returnExpr ast.Expr) *ast.FuncDecl {
-
-	var returnType *ast.FieldList
+	var (
+		returnType *ast.FieldList
+		stmt       ast.Stmt
+	)
 	returnTypeString := deduceTypeString(returnExpr)
-	var stmt ast.Stmt
 	if returnTypeString != "" {
 		returnType = &ast.FieldList{List: []*ast.Field{&ast.Field{Type: ast.NewIdent(returnTypeString)}}}
 		stmt = &ast.ReturnStmt{Results: []ast.Expr{returnExpr}}
