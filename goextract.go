@@ -113,7 +113,7 @@ func varIdentsUsedIn(nodes []ast.Node) map[string]*ast.Ident {
 				case *ast.AssignStmt:
 					for _, lhs := range typedDecl.Lhs {
 						if lhs.(*ast.Ident).Name == ident.Name {
-							result[ident.Name] = ident //deduceTypeString(typedDecl.Rhs[i].(ast.Expr))
+							result[ident.Name] = ident
 						}
 					}
 				default:
