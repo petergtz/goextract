@@ -50,8 +50,8 @@ func extractExpression(
 	expr ast.Expr,
 	parent ast.Node,
 	extractedFuncName string) {
-	params := allUsedIdentsThatAreVars([]ast.Node{expr})
-	util.MapStringAstIdentRemoveKeys(params, namesOf(globalVars(astFile)))
+	params := varIdentsUsedIn([]ast.Node{expr})
+	util.MapStringAstIdentRemoveKeys(params, namesOf(globalVarIdents(astFile)))
 
 	switch typedNode := parent.(type) {
 	case *ast.AssignStmt:

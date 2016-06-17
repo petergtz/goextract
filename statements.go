@@ -63,11 +63,11 @@ func extractMultipleStatements(
 	stmtsToExtract []ast.Node,
 	parentNode ast.Node,
 	extractedFuncName string) {
-	params := allUsedIdentsThatAreVars(stmtsToExtract)
+	params := varIdentsUsedIn(stmtsToExtract)
 	varsDeclaredWithinStmtsToExtract :=
-		varsWithTypesDeclaredWithin(stmtsToExtract)
+		varIdentsDeclaredWithin(stmtsToExtract)
 	util.MapStringAstIdentRemoveKeys(params, namesOf(varsDeclaredWithinStmtsToExtract))
-	util.MapStringAstIdentRemoveKeys(params, namesOf(globalVars(astFile)))
+	util.MapStringAstIdentRemoveKeys(params, namesOf(globalVarIdents(astFile)))
 
 	var varsUsedAfterwards map[string]*ast.Ident
 
@@ -82,7 +82,7 @@ func extractMultipleStatements(
 				break
 			}
 		}
-		varsUsedAfterwards = varsWithTypesUsedIn(typedParentNode.List[indexOfExtractedStmt+len(stmtsToExtract):], varsDeclaredWithinStmtsToExtract)
+		varsUsedAfterwards = overlappingVarsIdentsUsedIn(typedParentNode.List[indexOfExtractedStmt+len(stmtsToExtract):], varsDeclaredWithinStmtsToExtract)
 		for _, node := range stmtsToExtract {
 			stmts = append(stmts, node.(ast.Stmt))
 		}

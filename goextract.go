@@ -66,7 +66,7 @@ func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection
 	}
 }
 
-func globalVars(astFile *ast.File) map[string]*ast.Ident {
+func globalVarIdents(astFile *ast.File) map[string]*ast.Ident {
 	result := make(map[string]*ast.Ident)
 	ast.Inspect(astFile, func(node ast.Node) bool {
 		switch typedNode := node.(type) {
@@ -88,7 +88,7 @@ func globalVars(astFile *ast.File) map[string]*ast.Ident {
 	return result
 }
 
-func varsWithTypesDeclaredWithin(nodes []ast.Node) map[string]*ast.Ident {
+func varIdentsDeclaredWithin(nodes []ast.Node) map[string]*ast.Ident {
 	result := make(map[string]*ast.Ident)
 	for _, node := range nodes {
 		ast.Inspect(node, func(node ast.Node) bool {
@@ -103,7 +103,7 @@ func varsWithTypesDeclaredWithin(nodes []ast.Node) map[string]*ast.Ident {
 	return result
 }
 
-func allUsedIdentsThatAreVars(nodes []ast.Node) map[string]*ast.Ident {
+func varIdentsUsedIn(nodes []ast.Node) map[string]*ast.Ident {
 	result := make(map[string]*ast.Ident)
 	for _, node := range nodes {
 		ast.Inspect(node, func(node ast.Node) bool {
@@ -127,7 +127,7 @@ func allUsedIdentsThatAreVars(nodes []ast.Node) map[string]*ast.Ident {
 }
 
 // TODO rename to varIdentsUsedIn
-func varsWithTypesUsedIn(stmts []ast.Stmt, outOf map[string]*ast.Ident) map[string]*ast.Ident {
+func overlappingVarsIdentsUsedIn(stmts []ast.Stmt, outOf map[string]*ast.Ident) map[string]*ast.Ident {
 	result := make(map[string]*ast.Ident)
 	for _, stmt := range stmts {
 		ast.Inspect(stmt, func(node ast.Node) bool {
@@ -142,17 +142,17 @@ func varsWithTypesUsedIn(stmts []ast.Stmt, outOf map[string]*ast.Ident) map[stri
 	return result
 }
 
-func namesOf(vars map[string]*ast.Ident) []string {
-	result := make([]string, 0, len(vars))
-	for k := range vars {
+func namesOf(idents map[string]*ast.Ident) []string {
+	result := make([]string, 0, len(idents))
+	for k := range idents {
 		result = append(result, k)
 	}
 	return result
 }
 
-func exprsFrom(vars map[string]*ast.Ident) []ast.Expr {
-	result := make([]ast.Expr, 0, len(vars))
-	for _, v := range vars {
+func exprsFrom(idents map[string]*ast.Ident) []ast.Expr {
+	result := make([]ast.Expr, 0, len(idents))
+	for _, v := range idents {
 		result = append(result, v)
 	}
 	return result
