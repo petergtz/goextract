@@ -190,6 +190,18 @@ func deduceTypes(exprs []ast.Expr) []*ast.Field {
 	return result
 }
 
+func deduceTypeIdentsForExpr(expr ast.Expr) []*ast.Ident {
+
+}
+
+func deduceTypeIdentForVarIdent(ident *ast.Ident) *ast.Ident {
+
+}
+
+func deduceTypeIdentsForVarIdents(ident []*ast.Ident) []*ast.Ident {
+
+}
+
 func deduceTypeString(expr ast.Expr) string {
 	switch typedExpr := expr.(type) {
 	case *ast.BasicLit:
@@ -214,6 +226,7 @@ func deduceTypeString(expr ast.Expr) string {
 func findTypeFor(name string, assignStmt *ast.AssignStmt) string {
 	for i := range assignStmt.Lhs {
 		if assignStmt.Lhs[i].(*ast.Ident).Name == name {
+			ast.Print(nil, assignStmt)
 			return deduceTypeString(assignStmt.Rhs[i])
 		}
 	}
