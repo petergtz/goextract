@@ -1,0 +1,15 @@
+package test_data
+
+func f() {
+	a, b, c := MyExtractedFunc()
+	_ = a
+	_ = b
+	_ = c
+}
+
+func g() (int, bool, string) {
+	return 1, true, "Hello"
+}
+func MyExtractedFunc() (int, bool, string) {
+	return g()
+}

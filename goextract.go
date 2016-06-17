@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -30,7 +31,10 @@ func ExtractFileToFile(inputFileName string, selection Selection, extractedFuncN
 	doExtraction(fileSet, astFile, selection, extractedFuncName)
 	util.WriteFileAsStringOrPanic(outputFilename, stringFrom(fileSet, astFile))
 	err := exec.Command("gofmt", "-w", outputFilename).Run()
-	util.PanicOnError(err)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, util.ReadFileAsStringOrPanic(outputFilename))
+		panic(err)
+	}
 }
 
 func ExtractFileToString(inputFileName string, selection Selection, extractedFuncName string) string {
@@ -194,11 +198,11 @@ func deduceTypeString(expr ast.Expr) string {
 		if typedExpr.Fun.(*ast.Ident).Obj.Decl.(*ast.FuncDecl).Type.Results == nil {
 			return ""
 		}
-		result := ""
+		var result []string
 		for _, res := range typedExpr.Fun.(*ast.Ident).Obj.Decl.(*ast.FuncDecl).Type.Results.List {
-			result += " " + res.Type.(*ast.Ident).Name
+			result = append(result, res.Type.(*ast.Ident).Name)
 		}
-		return result
+		return "(" + strings.Join(result, ", ") + ")"
 	case *ast.Ident:
 		// return typedExpr.Obj.Type.(*ast.Ident).Name
 		return findTypeFor(typedExpr.Obj.Name, typedExpr.Obj.Decl.(*ast.AssignStmt))
