@@ -66,10 +66,10 @@ func extractMultipleStatements(
 	params := allUsedIdentsThatAreVars(stmtsToExtract)
 	varsDeclaredWithinStmtsToExtract :=
 		varsWithTypesDeclaredWithin(stmtsToExtract)
-	util.MapStringStringRemoveKeys(params, namesOf(varsDeclaredWithinStmtsToExtract))
-	util.MapStringStringRemoveKeys(params, globalVars(astFile))
+	util.MapStringAstIdentRemoveKeys(params, namesOf(varsDeclaredWithinStmtsToExtract))
+	util.MapStringAstIdentRemoveKeys(params, globalVars(astFile))
 
-	var varsUsedAfterwards map[string]string
+	var varsUsedAfterwards map[string]*ast.Ident
 
 	var stmts []ast.Stmt
 
@@ -109,7 +109,7 @@ func extractMultipleStatements(
 		extractedFuncName,
 		fieldsFrom(params),
 		stmts,
-		returnExpressionsFrom(varsUsedAfterwards),
+		exprsFrom(varsUsedAfterwards),
 	))
 }
 
@@ -117,6 +117,7 @@ func multipleStmtFuncDeclWith(
 	extractedFuncName string,
 	fields []*ast.Field,
 	stmts []ast.Stmt,
+	// TODO should these be ast.Idents?
 	definedVars []ast.Expr) *ast.FuncDecl {
 
 	allStmts := make([]ast.Stmt, len(stmts), len(stmts)+1)

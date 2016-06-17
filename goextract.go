@@ -88,13 +88,13 @@ func globalVars(astFile *ast.File) []string {
 	return result
 }
 
-func varsWithTypesDeclaredWithin(nodes []ast.Node) map[string]string {
-	result := make(map[string]string)
+func varsWithTypesDeclaredWithin(nodes []ast.Node) map[string]*ast.Ident {
+	result := make(map[string]*ast.Ident)
 	for _, node := range nodes {
 		ast.Inspect(node, func(node ast.Node) bool {
 			if assignStmt, ok := node.(*ast.AssignStmt); ok && assignStmt.Tok.String() == ":=" {
 				for i := range assignStmt.Lhs {
-					result[assignStmt.Lhs[i].(*ast.Ident).Name] = deduceTypeString(assignStmt.Rhs[i])
+					result[assignStmt.Lhs[i].(*ast.Ident).Name] = assignStmt.Lhs[i].(*ast.Ident)
 				}
 			}
 			return true
@@ -103,21 +103,21 @@ func varsWithTypesDeclaredWithin(nodes []ast.Node) map[string]string {
 	return result
 }
 
-func allUsedIdentsThatAreVars(nodes []ast.Node) map[string]string {
-	result := make(map[string]string)
+func allUsedIdentsThatAreVars(nodes []ast.Node) map[string]*ast.Ident {
+	result := make(map[string]*ast.Ident)
 	for _, node := range nodes {
 		ast.Inspect(node, func(node ast.Node) bool {
-			if typedNode, ok := node.(*ast.Ident); ok &&
-				typedNode.Obj != nil && typedNode.Obj.Kind == ast.Var {
-				switch typedDecl := typedNode.Obj.Decl.(type) {
+			if ident, ok := node.(*ast.Ident); ok &&
+				ident.Obj != nil && ident.Obj.Kind == ast.Var {
+				switch typedDecl := ident.Obj.Decl.(type) {
 				case *ast.AssignStmt:
-					for i, lhs := range typedDecl.Lhs {
-						if lhs.(*ast.Ident).Name == typedNode.Name {
-							result[typedNode.Name] = deduceTypeString(typedDecl.Rhs[i].(ast.Expr))
+					for _, lhs := range typedDecl.Lhs {
+						if lhs.(*ast.Ident).Name == ident.Name {
+							result[ident.Name] = ident //deduceTypeString(typedDecl.Rhs[i].(ast.Expr))
 						}
 					}
 				default:
-					result[typedNode.Name] = "UnresolvedType"
+					result[ident.Name] = ast.NewIdent("UnresolvedType")
 				}
 			}
 			return true
@@ -126,13 +126,14 @@ func allUsedIdentsThatAreVars(nodes []ast.Node) map[string]string {
 	return result
 }
 
-func varsWithTypesUsedIn(stmts []ast.Stmt, outOf map[string]string) map[string]string {
-	result := make(map[string]string)
+// TODO rename to varIdentsUsedIn
+func varsWithTypesUsedIn(stmts []ast.Stmt, outOf map[string]*ast.Ident) map[string]*ast.Ident {
+	result := make(map[string]*ast.Ident)
 	for _, stmt := range stmts {
 		ast.Inspect(stmt, func(node ast.Node) bool {
 			if ident, ok := node.(*ast.Ident); ok {
-				if outOf[ident.Name] != "" {
-					result[ident.Name] = outOf[ident.Name]
+				if outOf[ident.Name] != nil {
+					result[ident.Name] = ident
 				}
 			}
 			return true
@@ -141,7 +142,7 @@ func varsWithTypesUsedIn(stmts []ast.Stmt, outOf map[string]string) map[string]s
 	return result
 }
 
-func namesOf(vars map[string]string) []string {
+func namesOf(vars map[string]*ast.Ident) []string {
 	result := make([]string, 0, len(vars))
 	for k := range vars {
 		result = append(result, k)
@@ -149,34 +150,26 @@ func namesOf(vars map[string]string) []string {
 	return result
 }
 
-func returnExpressionsFrom(vars map[string]string) []ast.Expr {
-	var result []ast.Expr
-	for k, v := range vars {
-		// TODO not sure this is the right way of creating a identifier + type
-		result = append(result, &ast.Ident{Name: k, Obj: &ast.Object{Type: ast.NewIdent(v)}})
+func exprsFrom(vars map[string]*ast.Ident) []ast.Expr {
+	result := make([]ast.Expr, 0, len(vars))
+	for _, v := range vars {
+		result = append(result, v)
 	}
 	return result
 }
 
-func callExprWith(funcName string, params map[string]string) *ast.CallExpr {
+func callExprWith(funcName string, params map[string]*ast.Ident) *ast.CallExpr {
 	return &ast.CallExpr{
 		Fun:  ast.NewIdent(funcName),
-		Args: argsFrom(params),
+		Args: exprsFrom(params),
 	}
 }
 
-func argsFrom(params map[string]string) (result []ast.Expr) {
-	for key := range params {
-		result = append(result, ast.NewIdent(key))
-	}
-	return
-}
-
-func fieldsFrom(params map[string]string) (result []*ast.Field) {
+func fieldsFrom(params map[string]*ast.Ident) (result []*ast.Field) {
 	for key, val := range params {
 		result = append(result, &ast.Field{
 			Names: []*ast.Ident{ast.NewIdent(key)},
-			Type:  ast.NewIdent(val),
+			Type:  ast.NewIdent(deduceTypeString(val)),
 		})
 	}
 	return
