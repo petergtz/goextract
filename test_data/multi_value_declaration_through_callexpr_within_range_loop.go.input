@@ -1,0 +1,14 @@
+package test_data
+
+func f() {
+	for i, s := range []string{"one", "two", "three"} {
+		a, b, c := g(i, s)
+		_ = a
+		_ = b
+		_ = c
+	}
+}
+
+func g(x int, y string) (int, bool, string) {
+	return x, true, y
+}
