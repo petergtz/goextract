@@ -66,8 +66,8 @@ func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection
 	}
 }
 
-func globalVars(astFile *ast.File) []string {
-	var result []string
+func globalVars(astFile *ast.File) map[string]*ast.Ident {
+	result := make(map[string]*ast.Ident)
 	ast.Inspect(astFile, func(node ast.Node) bool {
 		switch typedNode := node.(type) {
 		case *ast.FuncDecl:
@@ -76,7 +76,7 @@ func globalVars(astFile *ast.File) []string {
 			if typedNode.Tok.String() == "var" {
 				for _, spec := range typedNode.Specs {
 					for _, name := range spec.(*ast.ValueSpec).Names {
-						result = append(result, name.Name)
+						result[name.Name] = name
 					}
 				}
 			}

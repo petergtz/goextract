@@ -67,7 +67,7 @@ func extractMultipleStatements(
 	varsDeclaredWithinStmtsToExtract :=
 		varsWithTypesDeclaredWithin(stmtsToExtract)
 	util.MapStringAstIdentRemoveKeys(params, namesOf(varsDeclaredWithinStmtsToExtract))
-	util.MapStringAstIdentRemoveKeys(params, globalVars(astFile))
+	util.MapStringAstIdentRemoveKeys(params, namesOf(globalVars(astFile)))
 
 	var varsUsedAfterwards map[string]*ast.Ident
 
