@@ -199,15 +199,15 @@ func deduceTypeIdentsForExpr(expr ast.Expr) []*ast.Ident {
 	case *ast.CompositeLit:
 		return deduceTypeIdentsForExpr(typedExpr.Type)
 	case *ast.ParenExpr:
-		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+		return deduceTypeIdentsForExpr(typedExpr.X)
 	case *ast.SelectorExpr:
-		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+		return deduceTypeIdentsForExpr(typedExpr.X)
 	case *ast.IndexExpr:
-		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+		return deduceTypeIdentsForExpr(typedExpr.X)
 	case *ast.SliceExpr:
-		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+		return deduceTypeIdentsForExpr(typedExpr.X)
 	case *ast.TypeAssertExpr:
-		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+		return []*ast.Ident{typedExpr.Type.(*ast.Ident)}
 	case *ast.CallExpr:
 		if typedExpr.Fun.(*ast.Ident).Obj.Decl.(*ast.FuncDecl).Type.Results == nil {
 			return nil
@@ -221,16 +221,15 @@ func deduceTypeIdentsForExpr(expr ast.Expr) []*ast.Ident {
 		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
 	case *ast.UnaryExpr:
 		if typedExpr.Op == token.RANGE {
-			ast.Print(nil, typedExpr)
 			return []*ast.Ident{ast.NewIdent("int"), deduceTypeIdentsForExpr(typedExpr.X)[0]}
 		} else {
 
 			panic("UnaryExpr not implemented yet")
 		}
 	case *ast.BinaryExpr:
-		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+		return deduceTypeIdentsForExpr(typedExpr.X)
 	case *ast.KeyValueExpr:
-		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+		return []*ast.Ident{typedExpr.Value.(*ast.Ident)}
 	case *ast.ArrayType:
 		return []*ast.Ident{typedExpr.Elt.(*ast.Ident)}
 	case *ast.StructType:
