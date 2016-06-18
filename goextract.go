@@ -20,6 +20,7 @@ import (
 	"go/token"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 
 	"github.com/petergtz/goextract/util"
@@ -96,11 +97,25 @@ func varIdentsDeclaredWithin(nodes []ast.Node) map[string]*ast.Ident {
 	result := make(map[string]*ast.Ident)
 	for _, node := range nodes {
 		ast.Inspect(node, func(node ast.Node) bool {
-			if assignStmt, ok := node.(*ast.AssignStmt); ok && assignStmt.Tok.String() == ":=" {
-				for i := range assignStmt.Lhs {
-					result[assignStmt.Lhs[i].(*ast.Ident).Name] = assignStmt.Lhs[i].(*ast.Ident)
+			switch typedNode := node.(type) {
+
+			case *ast.AssignStmt:
+				if typedNode.Tok.String() == ":=" {
+					for i := range typedNode.Lhs {
+						result[typedNode.Lhs[i].(*ast.Ident).Name] = typedNode.Lhs[i].(*ast.Ident)
+					}
+				}
+
+			case *ast.RangeStmt:
+				if typedNode.Tok.String() == ":=" {
+					result[typedNode.Key.(*ast.Ident).Name] = typedNode.Key.(*ast.Ident)
+					if typedNode.Value != nil {
+						result[typedNode.Value.(*ast.Ident).Name] = typedNode.Value.(*ast.Ident)
+					}
 				}
 			}
+
+			// TODO: Add IfStmt, ForStmt, SwitchStmt etc.
 			return true
 		})
 	}
@@ -113,16 +128,7 @@ func varIdentsUsedIn(nodes []ast.Node) map[string]*ast.Ident {
 		ast.Inspect(node, func(node ast.Node) bool {
 			if ident, ok := node.(*ast.Ident); ok &&
 				ident.Obj != nil && ident.Obj.Kind == ast.Var {
-				switch typedDecl := ident.Obj.Decl.(type) {
-				case *ast.AssignStmt:
-					for _, lhs := range typedDecl.Lhs {
-						if lhs.(*ast.Ident).Name == ident.Name {
-							result[ident.Name] = ident
-						}
-					}
-				default:
-					result[ident.Name] = ast.NewIdent("UnresolvedType")
-				}
+				result[ident.Name] = ident
 			}
 			return true
 		})
@@ -148,16 +154,16 @@ func overlappingVarsIdentsUsedIn(stmts []ast.Stmt, outOf map[string]*ast.Ident) 
 
 func namesOf(idents map[string]*ast.Ident) []string {
 	result := make([]string, 0, len(idents))
-	for k := range idents {
+	for _, k := range sortedKeysFrom(idents) {
 		result = append(result, k)
 	}
 	return result
 }
 
 func exprsFrom(idents map[string]*ast.Ident) []ast.Expr {
-	result := make([]ast.Expr, 0, len(idents))
-	for _, v := range idents {
-		result = append(result, v)
+	result := make([]ast.Expr, len(idents))
+	for i, key := range sortedKeysFrom(idents) {
+		result[i] = idents[key]
 	}
 	return result
 }
@@ -170,35 +176,48 @@ func callExprWith(funcName string, params map[string]*ast.Ident) *ast.CallExpr {
 }
 
 func fieldsFrom(params map[string]*ast.Ident) (result []*ast.Field) {
-	for key, val := range params {
+	for _, key := range sortedKeysFrom(params) {
 		result = append(result, &ast.Field{
 			Names: []*ast.Ident{ast.NewIdent(key)},
-			Type:  deduceTypeIdentForVarIdent(val),
+			Type:  deduceTypeIdentForVarIdent(params[key]),
 		})
 	}
 	return
 }
 
-func deduceTypeIdentsForExpr(expr ast.Expr) []*ast.Ident {
+func sortedKeysFrom(m map[string]*ast.Ident) []string {
+	var keys []string
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func deduceTypeIdentsForExpr(expr ast.Expr) []ast.Expr {
 	switch typedExpr := expr.(type) {
 	case *ast.Ident:
+		// TODO why do we even get type-like idents in here? Shouldn't this be already be handled one level higher?
+		if typedExpr.Obj == nil {
+			return []ast.Expr{typedExpr}
+		}
 		switch typedExpr.Obj.Kind {
 		case ast.Var:
-			return []*ast.Ident{deduceTypeIdentForVarIdent(typedExpr)}
+			return []ast.Expr{deduceTypeIdentForVarIdent(typedExpr)}
 		case ast.Typ:
-			return []*ast.Ident{typedExpr}
+			return []ast.Expr{typedExpr}
 		default:
 			panic("Unexpected ident obj kind")
 		}
 	case *ast.Ellipsis:
-		return []*ast.Ident{typedExpr.Elt.(*ast.Ident)}
+		return []ast.Expr{typedExpr.Elt.(*ast.Ident)}
 	case *ast.BasicLit:
-		return []*ast.Ident{ast.NewIdent(strings.ToLower(typedExpr.Kind.String()))}
+		return []ast.Expr{ast.NewIdent(strings.ToLower(typedExpr.Kind.String()))}
 	case *ast.FuncLit:
 		if typedExpr.Type.Results == nil {
 			return nil
 		}
-		var result []*ast.Ident
+		var result []ast.Expr
 		for _, res := range typedExpr.Type.Results.List {
 			result = append(result, res.Type.(*ast.Ident))
 		}
@@ -208,18 +227,25 @@ func deduceTypeIdentsForExpr(expr ast.Expr) []*ast.Ident {
 	case *ast.ParenExpr:
 		return deduceTypeIdentsForExpr(typedExpr.X)
 	case *ast.SelectorExpr:
-		return deduceTypeIdentsForExpr(typedExpr.X)
+		return deduceTypeIdentsForExpr(typedExpr.Sel)
 	case *ast.IndexExpr:
 		return deduceTypeIdentsForExpr(typedExpr.X)
 	case *ast.SliceExpr:
 		return deduceTypeIdentsForExpr(typedExpr.X)
 	case *ast.TypeAssertExpr:
-		return []*ast.Ident{typedExpr.Type.(*ast.Ident)}
+		if typedExpr.Type == nil {
+			return []ast.Expr{ast.NewIdent("TypeSwitch")}
+		} else {
+			return []ast.Expr{typedExpr.Type.(*ast.Ident)}
+		}
 	case *ast.CallExpr:
+		if typedExpr.Fun.(*ast.Ident).Obj == nil {
+			return []ast.Expr{ast.NewIdent("UnresolvedIdent_" + typedExpr.Fun.(*ast.Ident).Name)}
+		}
 		if typedExpr.Fun.(*ast.Ident).Obj.Decl.(*ast.FuncDecl).Type.Results == nil {
 			return nil
 		}
-		var result []*ast.Ident
+		var result []ast.Expr
 		for _, res := range typedExpr.Fun.(*ast.Ident).Obj.Decl.(*ast.FuncDecl).Type.Results.List {
 			result = append(result, res.Type.(*ast.Ident))
 		}
@@ -229,18 +255,18 @@ func deduceTypeIdentsForExpr(expr ast.Expr) []*ast.Ident {
 	case *ast.UnaryExpr:
 		switch typedExpr.Op {
 		case token.RANGE:
-			return []*ast.Ident{ast.NewIdent("int"), deduceTypeIdentsForExpr(typedExpr.X)[0]}
+			return []ast.Expr{ast.NewIdent("int"), deduceTypeIdentsForExpr(typedExpr.X)[0]}
 		case token.AND:
-			return []*ast.Ident{ast.NewIdent("*" + deduceTypeIdentsForExpr(typedExpr.X)[0].Name)}
+			return []ast.Expr{&ast.StarExpr{X: deduceTypeIdentsForExpr(typedExpr.X)[0]}}
 		default:
 			panic(fmt.Sprintf("UnaryExpr not implemented with Op \"%v\" yet", typedExpr.Op))
 		}
 	case *ast.BinaryExpr:
 		return deduceTypeIdentsForExpr(typedExpr.X)
 	case *ast.KeyValueExpr:
-		return []*ast.Ident{typedExpr.Value.(*ast.Ident)}
+		return []ast.Expr{typedExpr.Value.(*ast.Ident)}
 	case *ast.ArrayType:
-		return []*ast.Ident{typedExpr.Elt.(*ast.Ident)}
+		return []ast.Expr{typedExpr.Elt.(*ast.Ident)}
 	case *ast.StructType:
 		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
 	case *ast.FuncType:
@@ -257,7 +283,11 @@ func deduceTypeIdentsForExpr(expr ast.Expr) []*ast.Ident {
 	}
 }
 
-func deduceTypeIdentForVarIdent(ident *ast.Ident) *ast.Ident {
+// Note: a type can also be a *SelectorExpr e.g., therefore return type here
+// cannot be *ast.Ident
+func deduceTypeIdentForVarIdent(ident *ast.Ident) ast.Expr {
+	// ast.Fprint(os.Stderr, nil, ident, ast.NotNilFilter)
+	// spew.Dump(ident)
 	if ident.Obj.Kind != ast.Var {
 		panic(fmt.Sprintf("Expected ObjKind \"var\" for ident, but got \"%v\"", ident.Obj.Kind))
 	}
@@ -280,7 +310,7 @@ func deduceTypeIdentForVarIdent(ident *ast.Ident) *ast.Ident {
 		for i, name := range typedDecl.Names {
 			if name.Obj == ident.Obj {
 				if typedDecl.Type != nil {
-					return typedDecl.Type.(*ast.Ident)
+					return typedDecl.Type
 				} else {
 					if len(typedDecl.Values) == 0 {
 						panic("Unexpected empty value")
@@ -295,12 +325,20 @@ func deduceTypeIdentForVarIdent(ident *ast.Ident) *ast.Ident {
 			}
 		}
 		panic("Unexpected: no result in ValueSpec")
+	case *ast.Field:
+		for _, name := range typedDecl.Names {
+			if name.Obj == ident.Obj {
+				return typedDecl.Type //deduceTypeIdentsForExpr(typedDecl.Type)[0]
+			}
+		}
+		panic("Unexpected: no result in Field")
+
 	default:
-		panic("Unexpected decl type")
+		panic(fmt.Sprintf("Unexpected decl type %T", typedDecl))
 	}
 }
 
-func deduceTypeIdentsForVarIdents(varIdents []*ast.Ident) (typeIdents []*ast.Ident) {
+func deduceTypeIdentsForVarIdents(varIdents []*ast.Ident) (typeIdents []ast.Expr) {
 	for _, ident := range varIdents {
 		typeIdents = append(typeIdents, deduceTypeIdentForVarIdent(ident))
 	}

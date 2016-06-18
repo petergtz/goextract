@@ -1,0 +1,55 @@
+package test_data
+
+import (
+	"fmt"
+	"go/ast"
+	"go/token"
+	"reflect"
+
+	"github.com/petergtz/goextract/util"
+)
+
+func extractExpression(
+	astFile *ast.File,
+	fileSet *token.FileSet,
+	expr ast.Expr,
+	parent ast.Node,
+	extractedFuncName string) {
+	params := varIdentsUsedIn([]ast.Node{expr})
+	util.MapStringAstIdentRemoveKeys(params, namesOf(globalVarIdents(astFile)))
+
+	switch typedNode := parent.(type) {
+	case *ast.AssignStmt:
+		for i, rhs := range typedNode.Rhs {
+			if rhs == expr {
+				typedNode.Rhs[i] = callExprWith(extractedFuncName, params)
+			}
+		}
+	case *ast.CallExpr:
+		for i, arg := range typedNode.Args {
+			if arg == expr {
+				typedNode.Args[i] = callExprWith(extractedFuncName, params)
+			}
+		}
+	case *ast.ExprStmt:
+		typedNode.X = callExprWith(extractedFuncName, params)
+
+	case *ast.ReturnStmt:
+		for i, result := range typedNode.Results {
+			if result == expr {
+				typedNode.Results[i] = callExprWith(extractedFuncName, params)
+			}
+		}
+
+	// TODO:
+	// Add more cases here
+
+	default:
+		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(parent)))
+	}
+
+	astFile.Decls = append(astFile.Decls, singleExprStmtFuncDeclWith(
+		extractedFuncName,
+		fieldsFrom(params),
+		expr))
+}
