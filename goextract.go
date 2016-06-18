@@ -173,62 +173,121 @@ func fieldsFrom(params map[string]*ast.Ident) (result []*ast.Field) {
 	for key, val := range params {
 		result = append(result, &ast.Field{
 			Names: []*ast.Ident{ast.NewIdent(key)},
-			Type:  ast.NewIdent(deduceTypeString(val)),
+			Type:  deduceTypeIdentForVarIdent(val),
 		})
 	}
 	return
 }
 
-func deduceTypes(exprs []ast.Expr) []*ast.Field {
-	var result []*ast.Field
-	for _, expr := range exprs {
-		returnTypeString := deduceTypeString(expr)
-		if returnTypeString != "" {
-			result = append(result, &ast.Field{Type: ast.NewIdent(returnTypeString)})
-		}
-	}
-	return result
-}
-
 func deduceTypeIdentsForExpr(expr ast.Expr) []*ast.Ident {
+	switch typedExpr := expr.(type) {
+	case *ast.Ident:
+		return []*ast.Ident{deduceTypeIdentForVarIdent(typedExpr)}
+	case *ast.Ellipsis:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+	case *ast.BasicLit:
+		return []*ast.Ident{ast.NewIdent(strings.ToLower(typedExpr.Kind.String()))}
+	case *ast.FuncLit:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+	case *ast.CompositeLit:
+		return deduceTypeIdentsForExpr(typedExpr.Type)
+	case *ast.ParenExpr:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+	case *ast.SelectorExpr:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+	case *ast.IndexExpr:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+	case *ast.SliceExpr:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+	case *ast.TypeAssertExpr:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+	case *ast.CallExpr:
+		if typedExpr.Fun.(*ast.Ident).Obj.Decl.(*ast.FuncDecl).Type.Results == nil {
+			return nil
+		}
+		var result []*ast.Ident
+		for _, res := range typedExpr.Fun.(*ast.Ident).Obj.Decl.(*ast.FuncDecl).Type.Results.List {
+			result = append(result, res.Type.(*ast.Ident))
+		}
+		return result
+	case *ast.StarExpr:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+	case *ast.UnaryExpr:
+		if typedExpr.Op == token.RANGE {
+			ast.Print(nil, typedExpr)
+			return []*ast.Ident{ast.NewIdent("int"), deduceTypeIdentsForExpr(typedExpr.X)[0]}
+		} else {
 
+			panic("UnaryExpr not implemented yet")
+		}
+	case *ast.BinaryExpr:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+	case *ast.KeyValueExpr:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+	case *ast.ArrayType:
+		return []*ast.Ident{typedExpr.Elt.(*ast.Ident)}
+	case *ast.StructType:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+	case *ast.FuncType:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+	case *ast.InterfaceType:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+	case *ast.MapType:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+	case *ast.ChanType:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+
+	default:
+		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+	}
 }
 
 func deduceTypeIdentForVarIdent(ident *ast.Ident) *ast.Ident {
-
-}
-
-func deduceTypeIdentsForVarIdents(ident []*ast.Ident) []*ast.Ident {
-
-}
-
-func deduceTypeString(expr ast.Expr) string {
-	switch typedExpr := expr.(type) {
-	case *ast.BasicLit:
-		return strings.ToLower(typedExpr.Kind.String())
-	case *ast.CallExpr:
-		if typedExpr.Fun.(*ast.Ident).Obj.Decl.(*ast.FuncDecl).Type.Results == nil {
-			return ""
+	if ident.Obj.Kind != ast.Var {
+		panic("Expected var type for ident")
+	}
+	switch typedDecl := ident.Obj.Decl.(type) {
+	case *ast.AssignStmt:
+		for i, lhs := range typedDecl.Lhs {
+			if lhs.(*ast.Ident).Obj == ident.Obj {
+				if len(typedDecl.Rhs) == 0 {
+					panic("Unexpected empty Rhs")
+				}
+				if len(typedDecl.Rhs) == 1 {
+					return deduceTypeIdentsForExpr(typedDecl.Rhs[0])[i]
+				} else {
+					return deduceTypeIdentsForExpr(typedDecl.Rhs[i])[0]
+				}
+			}
 		}
-		var result []string
-		for _, res := range typedExpr.Fun.(*ast.Ident).Obj.Decl.(*ast.FuncDecl).Type.Results.List {
-			result = append(result, res.Type.(*ast.Ident).Name)
+		panic("Unexpected: no result in AssignStmt")
+	case *ast.ValueSpec:
+		for i, name := range typedDecl.Names {
+			if name.Obj == ident.Obj {
+				if typedDecl.Type != nil {
+					return typedDecl.Type.(*ast.Ident)
+				} else {
+					if len(typedDecl.Values) == 0 {
+						panic("Unexpected empty value")
+					}
+					if len(typedDecl.Values) == 1 {
+						return deduceTypeIdentsForExpr(typedDecl.Values[0])[i]
+					} else {
+						return deduceTypeIdentsForExpr(typedDecl.Values[i])[0]
+					}
+
+				}
+			}
 		}
-		return "(" + strings.Join(result, ", ") + ")"
-	case *ast.Ident:
-		// return typedExpr.Obj.Type.(*ast.Ident).Name
-		return findTypeFor(typedExpr.Obj.Name, typedExpr.Obj.Decl.(*ast.AssignStmt))
+		panic("Unexpected: no result in ValueSpec")
 	default:
-		return fmt.Sprintf("UnresolvedType_%T", expr)
+		panic("Unexpected decl type")
 	}
 }
 
-func findTypeFor(name string, assignStmt *ast.AssignStmt) string {
-	for i := range assignStmt.Lhs {
-		if assignStmt.Lhs[i].(*ast.Ident).Name == name {
-			ast.Print(nil, assignStmt)
-			return deduceTypeString(assignStmt.Rhs[i])
-		}
+func deduceTypeIdentsForVarIdents(varIdents []*ast.Ident) (typeIdents []*ast.Ident) {
+	for _, ident := range varIdents {
+		typeIdents = append(typeIdents, deduceTypeIdentForVarIdent(ident))
 	}
-	return "UnresolvedType"
+	return
 }

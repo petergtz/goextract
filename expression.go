@@ -94,9 +94,13 @@ func singleExprStmtFuncDeclWith(funcName string, fields []*ast.Field, returnExpr
 		returnType *ast.FieldList
 		stmt       ast.Stmt
 	)
-	returnTypeString := deduceTypeString(returnExpr)
-	if returnTypeString != "" {
-		returnType = &ast.FieldList{List: []*ast.Field{&ast.Field{Type: ast.NewIdent(returnTypeString)}}}
+	typeIdents := deduceTypeIdentsForExpr(returnExpr)
+	if len(typeIdents) != 0 {
+		var fieldList []*ast.Field
+		for _, typeIdent := range typeIdents {
+			fieldList = append(fieldList, &ast.Field{Type: typeIdent})
+		}
+		returnType = &ast.FieldList{List: fieldList}
 		stmt = &ast.ReturnStmt{Results: []ast.Expr{returnExpr}}
 	} else {
 		stmt = &ast.ExprStmt{X: returnExpr}

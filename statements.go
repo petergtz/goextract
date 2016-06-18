@@ -113,6 +113,13 @@ func extractMultipleStatements(
 	))
 }
 
+func identsFromExprs(exprs []ast.Expr) (idents []*ast.Ident) {
+	for _, expr := range exprs {
+		idents = append(idents, expr.(*ast.Ident))
+	}
+	return
+}
+
 func multipleStmtFuncDeclWith(
 	extractedFuncName string,
 	fields []*ast.Field,
@@ -125,7 +132,12 @@ func multipleStmtFuncDeclWith(
 	var returnType *ast.FieldList
 	if len(definedVars) != 0 {
 		allStmts = append(allStmts, &ast.ReturnStmt{Results: definedVars})
-		returnType = &ast.FieldList{List: deduceTypes(definedVars)}
+		typeIdents := deduceTypeIdentsForVarIdents(identsFromExprs(definedVars))
+		var fieldList []*ast.Field
+		for _, typeIdent := range typeIdents {
+			fieldList = append(fieldList, &ast.Field{Type: typeIdent})
+		}
+		returnType = &ast.FieldList{List: fieldList}
 	}
 	return &ast.FuncDecl{
 		Name: ast.NewIdent(extractedFuncName),
