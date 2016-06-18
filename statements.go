@@ -29,11 +29,11 @@ func (visitor *astNodeVisitorForMultipleStatements) Visit(node ast.Node) (w ast.
 		if visitor.context.fset.Position(node.Pos()).Line == visitor.context.selection.Begin.Line &&
 			visitor.context.fset.Position(node.Pos()).Column == visitor.context.selection.Begin.Column &&
 			!visitor.context.shouldRecord {
-			fmt.Println("Starting with node at pos", visitor.context.fset.Position(node.Pos()), "and end", visitor.context.fset.Position(node.End()))
-			ast.Print(visitor.context.fset, node)
-			fmt.Println(node.Pos(), node)
-			fmt.Println("Parent")
-			ast.Print(visitor.context.fset, visitor.parentNode)
+			// fmt.Println("Starting with node at pos", visitor.context.fset.Position(node.Pos()), "and end", visitor.context.fset.Position(node.End()))
+			// ast.Print(visitor.context.fset, node)
+			// fmt.Println(node.Pos(), node)
+			// fmt.Println("Parent")
+			// ast.Print(visitor.context.fset, visitor.parentNode)
 			visitor.context.posParent = visitor.parentNode
 			visitor.context.shouldRecord = true
 		}
@@ -42,10 +42,10 @@ func (visitor *astNodeVisitorForMultipleStatements) Visit(node ast.Node) (w ast.
 		}
 		if visitor.context.fset.Position(node.End()).Line == visitor.context.selection.End.Line &&
 			visitor.context.fset.Position(node.End()).Column == visitor.context.selection.End.Column {
-			fmt.Println("Ending with node at pos", visitor.context.fset.Position(node.Pos()), "and end", visitor.context.fset.Position(node.End()))
-			ast.Print(visitor.context.fset, node)
-			fmt.Println("Parent")
-			ast.Print(visitor.context.fset, visitor.parentNode)
+			// fmt.Println("Ending with node at pos", visitor.context.fset.Position(node.Pos()), "and end", visitor.context.fset.Position(node.End()))
+			// ast.Print(visitor.context.fset, node)
+			// fmt.Println("Parent")
+			// ast.Print(visitor.context.fset, visitor.parentNode)
 			visitor.context.endParent = visitor.parentNode
 			visitor.context.shouldRecord = false
 			return nil
