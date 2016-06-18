@@ -184,11 +184,18 @@ func deduceTypeIdentsForExpr(expr ast.Expr) []*ast.Ident {
 	case *ast.Ident:
 		return []*ast.Ident{deduceTypeIdentForVarIdent(typedExpr)}
 	case *ast.Ellipsis:
-		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+		return []*ast.Ident{typedExpr.Elt.(*ast.Ident)}
 	case *ast.BasicLit:
 		return []*ast.Ident{ast.NewIdent(strings.ToLower(typedExpr.Kind.String()))}
 	case *ast.FuncLit:
-		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+		if typedExpr.Type.Results == nil {
+			return nil
+		}
+		var result []*ast.Ident
+		for _, res := range typedExpr.Type.Results.List {
+			result = append(result, res.Type.(*ast.Ident))
+		}
+		return result
 	case *ast.CompositeLit:
 		return deduceTypeIdentsForExpr(typedExpr.Type)
 	case *ast.ParenExpr:
