@@ -182,7 +182,14 @@ func fieldsFrom(params map[string]*ast.Ident) (result []*ast.Field) {
 func deduceTypeIdentsForExpr(expr ast.Expr) []*ast.Ident {
 	switch typedExpr := expr.(type) {
 	case *ast.Ident:
-		return []*ast.Ident{deduceTypeIdentForVarIdent(typedExpr)}
+		switch typedExpr.Obj.Kind {
+		case ast.Var:
+			return []*ast.Ident{deduceTypeIdentForVarIdent(typedExpr)}
+		case ast.Typ:
+			return []*ast.Ident{typedExpr}
+		default:
+			panic("Unexpected ident obj kind")
+		}
 	case *ast.Ellipsis:
 		return []*ast.Ident{typedExpr.Elt.(*ast.Ident)}
 	case *ast.BasicLit:
@@ -220,11 +227,13 @@ func deduceTypeIdentsForExpr(expr ast.Expr) []*ast.Ident {
 	case *ast.StarExpr:
 		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
 	case *ast.UnaryExpr:
-		if typedExpr.Op == token.RANGE {
+		switch typedExpr.Op {
+		case token.RANGE:
 			return []*ast.Ident{ast.NewIdent("int"), deduceTypeIdentsForExpr(typedExpr.X)[0]}
-		} else {
-
-			panic("UnaryExpr not implemented yet")
+		case token.AND:
+			return []*ast.Ident{ast.NewIdent("*" + deduceTypeIdentsForExpr(typedExpr.X)[0].Name)}
+		default:
+			panic(fmt.Sprintf("UnaryExpr not implemented with Op \"%v\" yet", typedExpr.Op))
 		}
 	case *ast.BinaryExpr:
 		return deduceTypeIdentsForExpr(typedExpr.X)
@@ -250,7 +259,7 @@ func deduceTypeIdentsForExpr(expr ast.Expr) []*ast.Ident {
 
 func deduceTypeIdentForVarIdent(ident *ast.Ident) *ast.Ident {
 	if ident.Obj.Kind != ast.Var {
-		panic("Expected var type for ident")
+		panic(fmt.Sprintf("Expected ObjKind \"var\" for ident, but got \"%v\"", ident.Obj.Kind))
 	}
 	switch typedDecl := ident.Obj.Decl.(type) {
 	case *ast.AssignStmt:

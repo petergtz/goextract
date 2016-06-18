@@ -1,0 +1,12 @@
+package test_data
+
+type MyStruct struct {
+	a, b int
+}
+
+func f() {
+	v := &MyStruct{1, 2}
+	g(v)
+}
+
+func g(myStruct *MyStruct) {}
