@@ -94,7 +94,7 @@ func singleExprStmtFuncDeclWith(funcName string, fields []*ast.Field, returnExpr
 		returnType *ast.FieldList
 		stmt       ast.Stmt
 	)
-	typeIdents := deduceTypeIdentsForExpr(returnExpr)
+	typeIdents := deduceTypeExprsForExpr(returnExpr)
 	if len(typeIdents) != 0 {
 		var fieldList []*ast.Field
 		for _, typeIdent := range typeIdents {

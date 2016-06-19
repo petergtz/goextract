@@ -132,7 +132,7 @@ func multipleStmtFuncDeclWith(
 	var returnType *ast.FieldList
 	if len(definedVars) != 0 {
 		allStmts = append(allStmts, &ast.ReturnStmt{Results: definedVars})
-		typeIdents := deduceTypeIdentsForVarIdents(identsFromExprs(definedVars))
+		typeIdents := deduceTypeExprsForVarIdents(identsFromExprs(definedVars))
 		var fieldList []*ast.Field
 		for _, typeIdent := range typeIdents {
 			fieldList = append(fieldList, &ast.Field{Type: typeIdent})
