@@ -114,8 +114,6 @@ func varIdentsDeclaredWithin(nodes []ast.Node) map[string]*ast.Ident {
 					}
 				}
 			}
-
-			// TODO: Add IfStmt, ForStmt, SwitchStmt etc.
 			return true
 		})
 	}
