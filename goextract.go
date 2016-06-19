@@ -282,10 +282,8 @@ func deduceTypeIdentsForExpr(expr ast.Expr) []ast.Expr {
 }
 
 // Note: a type can also be a *SelectorExpr e.g., therefore return type here
-// cannot be *ast.Ident
+// cannot simply be *ast.Ident
 func deduceTypeIdentForVarIdent(ident *ast.Ident) ast.Expr {
-	// ast.Fprint(os.Stderr, nil, ident, ast.NotNilFilter)
-	// spew.Dump(ident)
 	if ident.Obj.Kind != ast.Var {
 		panic(fmt.Sprintf("Expected ObjKind \"var\" for ident, but got \"%v\"", ident.Obj.Kind))
 	}
@@ -297,6 +295,7 @@ func deduceTypeIdentForVarIdent(ident *ast.Ident) ast.Expr {
 					panic("Unexpected empty Rhs")
 				}
 				if len(typedDecl.Rhs) == 1 {
+					// this is the function call with multiple return values
 					return deduceTypeIdentsForExpr(typedDecl.Rhs[0])[i]
 				} else {
 					return deduceTypeIdentsForExpr(typedDecl.Rhs[i])[0]
@@ -326,7 +325,7 @@ func deduceTypeIdentForVarIdent(ident *ast.Ident) ast.Expr {
 	case *ast.Field:
 		for _, name := range typedDecl.Names {
 			if name.Obj == ident.Obj {
-				return typedDecl.Type //deduceTypeIdentsForExpr(typedDecl.Type)[0]
+				return typedDecl.Type
 			}
 		}
 		panic("Unexpected: no result in Field")
