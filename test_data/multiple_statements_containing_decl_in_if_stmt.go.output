@@ -1,0 +1,11 @@
+package test_data
+
+func f() {
+	MyExtractedFunc()
+
+}
+func MyExtractedFunc() {
+	if i := 1; i == 1 {
+		_ = i
+	}
+}
