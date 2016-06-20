@@ -91,6 +91,8 @@ func stmtsFromBlockStmt(node ast.Node) *[]ast.Stmt {
 		return &typedNode.List
 	case *ast.CaseClause:
 		return &typedNode.Body
+	case *ast.CommClause:
+		return &typedNode.Body
 	default:
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(node)))
 	}
