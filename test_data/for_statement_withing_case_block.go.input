@@ -1,0 +1,64 @@
+package main
+
+import (
+	"fmt"
+	"go/ast"
+	"go/token"
+	"reflect"
+
+	"github.com/petergtz/goextract/util"
+)
+
+func extractMultipleStatements(
+	astFile *ast.File,
+	fileSet *token.FileSet,
+	stmtsToExtract []ast.Node,
+	parentNode ast.Node,
+	extractedFuncName string) {
+	params := varIdentsUsedIn(stmtsToExtract)
+	varsDeclaredWithinStmtsToExtract :=
+		varIdentsDeclaredWithin(stmtsToExtract)
+	util.MapStringAstIdentRemoveKeys(params, namesOf(varsDeclaredWithinStmtsToExtract))
+	util.MapStringAstIdentRemoveKeys(params, namesOf(globalVarIdents(astFile)))
+
+	var varsUsedAfterwards map[string]*ast.Ident
+
+	var stmts []ast.Stmt
+
+	switch typedParentNode := parentNode.(type) {
+	case *ast.BlockStmt:
+		var indexOfExtractedStmt int
+		for i, stmt := range typedParentNode.List {
+			if stmt == stmtsToExtract[0] {
+				indexOfExtractedStmt = i
+				break
+			}
+		}
+		varsUsedAfterwards = overlappingVarsIdentsUsedIn(typedParentNode.List[indexOfExtractedStmt+len(stmtsToExtract):], varsDeclaredWithinStmtsToExtract)
+		for _, node := range stmtsToExtract {
+			stmts = append(stmts, node.(ast.Stmt))
+		}
+		if len(varsUsedAfterwards) == 0 {
+			typedParentNode.List[indexOfExtractedStmt] = &ast.ExprStmt{X: callExprWith(extractedFuncName, params)}
+
+		} else {
+			typedParentNode.List[indexOfExtractedStmt] = &ast.AssignStmt{
+				Lhs: []ast.Expr{ast.NewIdent(namesOf(varsUsedAfterwards)[0])},
+				Tok: token.DEFINE,
+				Rhs: []ast.Expr{callExprWith(extractedFuncName, params)},
+			}
+
+		}
+		typedParentNode.List = append(typedParentNode.List[:indexOfExtractedStmt+1], typedParentNode.List[indexOfExtractedStmt+len(stmtsToExtract):]...)
+
+	default:
+		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(parentNode)))
+	}
+
+	astFile.Decls = append(astFile.Decls, multipleStmtFuncDeclWith(
+		extractedFuncName,
+		fieldsFrom(params),
+		stmts,
+		exprsFrom(varsUsedAfterwards),
+	))
+}

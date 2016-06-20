@@ -35,6 +35,10 @@ func varIdentsDeclaredWithin(nodes []ast.Node) map[string]*ast.Ident {
 	for _, node := range nodes {
 		ast.Inspect(node, func(node ast.Node) bool {
 			switch typedNode := node.(type) {
+			case *ast.ValueSpec:
+				for _, name := range typedNode.Names {
+					result[name.Name] = name
+				}
 
 			case *ast.AssignStmt:
 				if typedNode.Tok.String() == ":=" {
@@ -77,6 +81,7 @@ func overlappingVarsIdentsUsedIn(stmts []ast.Stmt, outOf map[string]*ast.Ident) 
 	for _, stmt := range stmts {
 		ast.Inspect(stmt, func(node ast.Node) bool {
 			if ident, ok := node.(*ast.Ident); ok {
+
 				if outOf[ident.Name] != nil {
 					result[ident.Name] = ident
 				}
@@ -170,7 +175,7 @@ func deduceTypeExprsForExpr(expr ast.Expr) []ast.Expr {
 		return deduceTypeExprsForExpr(typedExpr.X)
 	case *ast.TypeAssertExpr:
 		if typedExpr.Type == nil {
-			return []ast.Expr{ast.NewIdent("TypeSwitch")}
+			return deduceTypeExprsForExpr(typedExpr.X)
 		} else {
 			return []ast.Expr{typedExpr.Type.(*ast.Ident)}
 		}

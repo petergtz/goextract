@@ -64,53 +64,53 @@ func extractMultipleStatements(
 	parentNode ast.Node,
 	extractedFuncName string) {
 	params := varIdentsUsedIn(stmtsToExtract)
-	varsDeclaredWithinStmtsToExtract :=
-		varIdentsDeclaredWithin(stmtsToExtract)
+	varsDeclaredWithinStmtsToExtract := varIdentsDeclaredWithin(stmtsToExtract)
 	util.MapStringAstIdentRemoveKeys(params, namesOf(varsDeclaredWithinStmtsToExtract))
 	util.MapStringAstIdentRemoveKeys(params, namesOf(globalVarIdents(astFile)))
 
-	var varsUsedAfterwards map[string]*ast.Ident
+	allStmts := stmtsFromBlockStmt(parentNode)
+	indexOfExtractedStmt := indexOf(stmtsToExtract[0].(ast.Stmt), *allStmts)
+	varsUsedAfterwards := overlappingVarsIdentsUsedIn((*allStmts)[indexOfExtractedStmt+len(stmtsToExtract):], varsDeclaredWithinStmtsToExtract)
 
-	var stmts []ast.Stmt
-
-	switch typedParentNode := parentNode.(type) {
-	case *ast.BlockStmt:
-		var indexOfExtractedStmt int
-		for i, stmt := range typedParentNode.List {
-			if stmt == stmtsToExtract[0] {
-				indexOfExtractedStmt = i
-				break
-			}
-		}
-		varsUsedAfterwards = overlappingVarsIdentsUsedIn(typedParentNode.List[indexOfExtractedStmt+len(stmtsToExtract):], varsDeclaredWithinStmtsToExtract)
-		for _, node := range stmtsToExtract {
-			stmts = append(stmts, node.(ast.Stmt))
-		}
-		if len(varsUsedAfterwards) == 0 {
-			typedParentNode.List[indexOfExtractedStmt] = &ast.ExprStmt{X: callExprWith(extractedFuncName, params)}
-
-		} else {
-			typedParentNode.List[indexOfExtractedStmt] = &ast.AssignStmt{
-				Lhs: []ast.Expr{ast.NewIdent(namesOf(varsUsedAfterwards)[0])},
-				Tok: token.DEFINE,
-				Rhs: []ast.Expr{callExprWith(extractedFuncName, params)},
-			}
-
-		}
-		typedParentNode.List = append(typedParentNode.List[:indexOfExtractedStmt+1], typedParentNode.List[indexOfExtractedStmt+len(stmtsToExtract):]...)
-
-	// TODO: Add cases for CommClause and CaseClause here
-
-	default:
-		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(parentNode)))
-	}
+	replaceStmtsWithFuncCallStmt(
+		allStmts,
+		indexOfExtractedStmt, len(stmtsToExtract),
+		varsUsedAfterwards, extractedFuncName, params)
 
 	astFile.Decls = append(astFile.Decls, multipleStmtFuncDeclWith(
 		extractedFuncName,
 		fieldsFrom(params),
-		stmts,
+		stmtsFromNodes(stmtsToExtract),
 		exprsFrom(varsUsedAfterwards),
 	))
+}
+
+func stmtsFromBlockStmt(node ast.Node) *[]ast.Stmt {
+	switch typedNode := node.(type) {
+	case *ast.BlockStmt:
+		return &typedNode.List
+	case *ast.CaseClause:
+		return &typedNode.Body
+	default:
+		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(node)))
+	}
+}
+
+func replaceStmtsWithFuncCallStmt(allStmts *[]ast.Stmt, indexOfExtractedStmt int, count int, varsUsedAfterwards map[string]*ast.Ident, extractedFuncName string, params map[string]*ast.Ident) {
+	(*allStmts)[indexOfExtractedStmt] = funcCallStmt(varsUsedAfterwards, extractedFuncName, params)
+	(*allStmts) = append((*allStmts)[:indexOfExtractedStmt+1], (*allStmts)[indexOfExtractedStmt+count:]...)
+}
+
+func funcCallStmt(varsUsedAfterwards map[string]*ast.Ident, extractedFuncName string, params map[string]*ast.Ident) ast.Stmt {
+	if len(varsUsedAfterwards) == 0 {
+		return &ast.ExprStmt{X: callExprWith(extractedFuncName, params)}
+	} else {
+		return &ast.AssignStmt{
+			Lhs: []ast.Expr{ast.NewIdent(namesOf(varsUsedAfterwards)[0])},
+			Tok: token.DEFINE,
+			Rhs: []ast.Expr{callExprWith(extractedFuncName, params)},
+		}
+	}
 }
 
 func identsFromExprs(exprs []ast.Expr) (idents []*ast.Ident) {
@@ -132,12 +132,7 @@ func multipleStmtFuncDeclWith(
 	var returnType *ast.FieldList
 	if len(definedVars) != 0 {
 		allStmts = append(allStmts, &ast.ReturnStmt{Results: definedVars})
-		typeIdents := deduceTypeExprsForVarIdents(identsFromExprs(definedVars))
-		var fieldList []*ast.Field
-		for _, typeIdent := range typeIdents {
-			fieldList = append(fieldList, &ast.Field{Type: typeIdent})
-		}
-		returnType = &ast.FieldList{List: fieldList}
+		returnType = &ast.FieldList{List: fieldListFromIdents(definedVars)}
 	}
 	return &ast.FuncDecl{
 		Name: ast.NewIdent(extractedFuncName),
@@ -147,4 +142,29 @@ func multipleStmtFuncDeclWith(
 		},
 		Body: &ast.BlockStmt{List: allStmts},
 	}
+}
+
+func indexOf(stmtToFind ast.Stmt, stmts []ast.Stmt) int {
+	for i, stmt := range stmts {
+		if stmt == stmtToFind {
+			return i
+		}
+	}
+	panic("Unexpected: statement not in list")
+}
+
+func stmtsFromNodes(nodes []ast.Node) []ast.Stmt {
+	stmts := make([]ast.Stmt, len(nodes))
+	for i, node := range nodes {
+		stmts[i] = node.(ast.Stmt)
+	}
+	return stmts
+}
+
+func fieldListFromIdents(idents []ast.Expr) []*ast.Field {
+	var fieldList []*ast.Field
+	for _, typeIdent := range deduceTypeExprsForVarIdents(identsFromExprs(idents)) {
+		fieldList = append(fieldList, &ast.Field{Type: typeIdent})
+	}
+	return fieldList
 }
