@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/petergtz/goextract/util"
 
@@ -18,24 +17,10 @@ var (
 
 func main() {
 	kingpin.Parse()
+	adjustedSelection := ShrinkToNonWhiteSpace(selectionFromString(*selection), util.ReadFileAsStringOrPanic(*inputFilename))
 	if *outputFilename == "" {
-		fmt.Println(ExtractFileToString(*inputFilename, selectionFromString(*selection), *funcName))
+		fmt.Println(ExtractFileToString(*inputFilename, adjustedSelection, *funcName))
 	} else {
-		ExtractFileToFile(*inputFilename, selectionFromString(*selection), *funcName, *outputFilename)
-	}
-}
-
-// TODO: error handling. Do this with regex
-func selectionFromString(s string) Selection {
-	s = strings.Replace(s, " ", "", -1)
-	beginEnd := strings.Split(s, "-")
-	beginString := beginEnd[0]
-	endString := beginEnd[1]
-	begin := strings.Split(beginString, ":")
-	end := strings.Split(endString, ":")
-
-	return Selection{
-		Begin: Position{util.ToInt(begin[0]), util.ToInt(begin[1])},
-		End:   Position{util.ToInt(end[0]), util.ToInt(end[1])},
+		ExtractFileToFile(*inputFilename, adjustedSelection, *funcName, *outputFilename)
 	}
 }
