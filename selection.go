@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/petergtz/goextract/util"
+	"github.com/pkg/math"
 )
 
 type Selection struct {
@@ -32,7 +33,10 @@ func ShrinkToNonWhiteSpace(selection Selection, sourceCode string) Selection {
 }
 
 func makeValid(pos Position, lines []string) Position {
-	return pos
+	return Position{
+		Line:   math.Min(math.Max(pos.Line, 1), len(lines)),
+		Column: math.Min(math.Max(pos.Column, 1), len(lines[len(lines)-1])+1),
+	}
 }
 
 func isWhitespace(lines []string, pos Position) bool {
