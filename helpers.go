@@ -192,7 +192,7 @@ func deduceTypeExprsForExpr(expr ast.Expr) []ast.Expr {
 		}
 		return result
 	case *ast.StarExpr:
-		panic(fmt.Sprintf("Type deduction for %T not implemented yet", expr))
+		return []ast.Expr{typedExpr}
 	case *ast.UnaryExpr:
 		switch typedExpr.Op {
 		case token.RANGE:
@@ -203,7 +203,14 @@ func deduceTypeExprsForExpr(expr ast.Expr) []ast.Expr {
 			panic(fmt.Sprintf("UnaryExpr not implemented with Op \"%v\" yet", typedExpr.Op))
 		}
 	case *ast.BinaryExpr:
-		return deduceTypeExprsForExpr(typedExpr.X)
+		switch typedExpr.Op {
+		case token.EQL,
+			token.LSS, token.GTR, token.LEQ, token.GEQ, token.LAND, token.LOR:
+			return []ast.Expr{ast.NewIdent("bool")}
+			// TODO this likely needs a refinements
+		default:
+			return deduceTypeExprsForExpr(typedExpr.X)
+		}
 	case *ast.KeyValueExpr:
 		return []ast.Expr{typedExpr.Value.(*ast.Ident)}
 	case *ast.ArrayType:

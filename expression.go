@@ -75,6 +75,10 @@ func extractExpression(
 				typedNode.Results[i] = callExprWith(extractedFuncName, params)
 			}
 		}
+	case *ast.IfStmt:
+		if typedNode.Cond == expr {
+			typedNode.Cond = callExprWith(extractedFuncName, params)
+		}
 
 	// TODO:
 	// Add more cases here
