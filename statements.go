@@ -57,7 +57,21 @@ func (visitor *astNodeVisitorForMultipleStatements) Visit(node ast.Node) (w ast.
 	}
 }
 
-func extractMultipleStatements(
+func matchMultipleStmts(fileSet *token.FileSet, astFile *ast.File, selection Selection) ([]ast.Node, ast.Node) {
+	v := &astNodeVisitorForMultipleStatements{parentNode: nil, context: &multipleStatementVisitorContext{fset: fileSet, selection: selection}}
+	ast.Walk(v, astFile)
+	if v.context.posParent != v.context.endParent {
+		panic(fmt.Sprintf("Selection is not valid. posParent: %v; endParent: %v",
+			v.context.posParent, v.context.endParent))
+	}
+	if v.context.posParent == nil {
+		panic(fmt.Sprintf("Selection is not valid. posParent: %v; endParent: %v",
+			v.context.posParent, v.context.endParent))
+	}
+	return v.context.nodesToExtract, v.context.posParent
+}
+
+func extractMultipleStatementsAsFunc(
 	astFile *ast.File,
 	fileSet *token.FileSet,
 	stmtsToExtract []ast.Node,

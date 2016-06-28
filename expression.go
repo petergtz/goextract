@@ -44,7 +44,13 @@ func (visitor *astNodeVisitorForExpressions) Visit(node ast.Node) (w ast.Visitor
 	}
 }
 
-func extractExpression(
+func matchExpression(fileSet *token.FileSet, astFile *ast.File, selection Selection) (ast.Expr, ast.Node) {
+	visitor := &astNodeVisitorForExpressions{parentNode: nil, context: &expressionVisitorContext{fset: fileSet, selection: selection}}
+	ast.Walk(visitor, astFile)
+	return visitor.context.exprToExtract, visitor.context.parent
+}
+
+func extractExpressionAsFunc(
 	astFile *ast.File,
 	fileSet *token.FileSet,
 	expr ast.Expr,

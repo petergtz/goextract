@@ -54,21 +54,11 @@ func ExtractStringToString(input string, selection Selection, extractedFuncName 
 }
 
 func doExtraction(fileSet *token.FileSet, astFile *ast.File, selection Selection, extractedFuncName string) {
-	visitor := &astNodeVisitorForExpressions{parentNode: nil, context: &expressionVisitorContext{fset: fileSet, selection: selection}}
-	ast.Walk(visitor, astFile)
-	if visitor.context.exprToExtract != nil {
-		extractExpression(astFile, fileSet, visitor.context.exprToExtract, visitor.context.parent, extractedFuncName)
+	expression, parentNode := matchExpression(fileSet, astFile, selection)
+	if expression != nil {
+		extractExpressionAsFunc(astFile, fileSet, expression, parentNode, extractedFuncName)
 	} else {
-		v := &astNodeVisitorForMultipleStatements{parentNode: nil, context: &multipleStatementVisitorContext{fset: fileSet, selection: selection}}
-		ast.Walk(v, astFile)
-		if v.context.posParent != v.context.endParent {
-			panic(fmt.Sprintf("Selection is not valid. posParent: %v; endParent: %v",
-				v.context.posParent, v.context.endParent))
-		}
-		if v.context.posParent == nil {
-			panic(fmt.Sprintf("Selection is not valid. posParent: %v; endParent: %v",
-				v.context.posParent, v.context.endParent))
-		}
-		extractMultipleStatements(astFile, fileSet, v.context.nodesToExtract, v.context.posParent, extractedFuncName)
+		stmts, parentNode := matchMultipleStmts(fileSet, astFile, selection)
+		extractMultipleStatementsAsFunc(astFile, fileSet, stmts, parentNode, extractedFuncName)
 	}
 }
