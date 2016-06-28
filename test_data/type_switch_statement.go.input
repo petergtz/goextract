@@ -41,9 +41,6 @@ func extractExpression(
 			}
 		}
 
-	// TODO:
-	// Add more cases here
-
 	default:
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(parent)))
 	}

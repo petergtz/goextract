@@ -12,16 +12,16 @@ import (
 )
 
 func astFromFile(filename string) (*token.FileSet, *ast.File) {
-	return astFromInput(util.ReadFileAsStringOrPanic(filename))
+	fileSet := token.NewFileSet()
+	astFile, err := parser.ParseFile(fileSet, filename, nil, parser.ParseComments)
+	util.PanicOnError(err)
+
+	return fileSet, astFile
 }
 
 func astFromInput(input string) (*token.FileSet, *ast.File) {
-	fileSet := token.NewFileSet() // positions are relative to fset
-	astFile, err := parser.ParseFile(
-		fileSet,
-		"",
-		input,
-		0)
+	fileSet := token.NewFileSet()
+	astFile, err := parser.ParseFile(fileSet, "", input, parser.ParseComments)
 	util.PanicOnError(err)
 
 	return fileSet, astFile
