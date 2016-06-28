@@ -1,0 +1,25 @@
+package test_data
+
+func f() {
+	if i := 1; i == 1 {
+		// some comment in here
+		_ = i // and here
+
+    // is this a decl comment?
+    var x int
+    _=x
+
+		// and another here
+	}
+}
+
+// a func doc
+func g() {
+  if i := 1; i == 1 {
+    _ = i
+
+    var x int
+    _=x
+
+  }
+}
