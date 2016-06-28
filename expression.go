@@ -60,6 +60,11 @@ func extractExpression(
 				typedNode.Rhs[i] = callExprWith(extractedFuncName, params)
 			}
 		}
+		for i, lhs := range typedNode.Lhs {
+			if lhs == expr {
+				typedNode.Lhs[i] = callExprWith(extractedFuncName, params)
+			}
+		}
 	case *ast.CallExpr:
 		for i, arg := range typedNode.Args {
 			if arg == expr {
@@ -80,8 +85,43 @@ func extractExpression(
 			typedNode.Cond = callExprWith(extractedFuncName, params)
 		}
 
-	// TODO:
-	// Add more cases here
+	case *ast.CaseClause:
+		for i, caseExpr := range typedNode.List {
+			if caseExpr == expr {
+				typedNode.List[i] = callExprWith(extractedFuncName, params)
+			}
+		}
+
+	case *ast.SwitchStmt:
+		if typedNode.Tag == expr {
+			typedNode.Tag = callExprWith(extractedFuncName, params)
+		}
+
+	case *ast.ForStmt:
+		if typedNode.Cond == expr {
+			typedNode.Cond = callExprWith(extractedFuncName, params)
+		}
+
+	case *ast.RangeStmt:
+		if typedNode.Key == expr {
+			typedNode.Key = callExprWith(extractedFuncName, params)
+		} else if typedNode.Value == expr {
+			typedNode.Value = callExprWith(extractedFuncName, params)
+		} else if typedNode.X == expr {
+			typedNode.X = callExprWith(extractedFuncName, params)
+		}
+
+	case *ast.SendStmt:
+		if typedNode.Chan == expr {
+			typedNode.Chan = callExprWith(extractedFuncName, params)
+		} else if typedNode.Value == expr {
+			typedNode.Value = callExprWith(extractedFuncName, params)
+		}
+
+	case *ast.IncDecStmt:
+		if typedNode.X == expr {
+			typedNode.X = callExprWith(extractedFuncName, params)
+		}
 
 	default:
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(parent)))
