@@ -1,0 +1,18 @@
+package test_data
+
+// some function comment
+func g() {}
+func h() {}
+func i() {}
+
+func f() {
+	g()
+	MyExtractedFunc()
+
+	i()
+}
+// some final comment
+
+func MyExtractedFunc() {
+	h()
+}

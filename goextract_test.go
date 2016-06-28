@@ -22,7 +22,8 @@ var focusedTests = map[string]bool{}
 
 var pendingTests = map[string]bool{
 	"multiple_simple_statements_taking_parameters_declared_beforehand_changed_within_and_used_afterwards": true,
-	"comments_in_statements": true,
+	"comments_in_statements":                true,
+	"comments_outside_extracted_statements": true,
 }
 
 var _ = Describe("Goextract", func() {
