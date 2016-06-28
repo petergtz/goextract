@@ -24,9 +24,11 @@ import (
 	"github.com/petergtz/goextract/util"
 )
 
-func ExtractFileToFile(inputFileName string, selection Selection, extractedFuncName string, outputFilename string) {
+func ExtractFileToFile(inputFileName string, selection Selection, extractedFuncName string, outputFilename string, debugOutput bool) {
 	fileSet, astFile := astFromFile(inputFileName)
-	createAstFileDump(inputFileName+".ast", fileSet, astFile)
+	if debugOutput {
+		createAstFileDump(inputFileName+".ast", fileSet, astFile)
+	}
 	doExtraction(fileSet, astFile, selection, extractedFuncName)
 	util.WriteFileAsStringOrPanic(outputFilename, stringFrom(fileSet, astFile))
 	err := exec.Command("gofmt", "-w", outputFilename).Run()
@@ -36,9 +38,11 @@ func ExtractFileToFile(inputFileName string, selection Selection, extractedFuncN
 	}
 }
 
-func ExtractFileToString(inputFileName string, selection Selection, extractedFuncName string) string {
+func ExtractFileToString(inputFileName string, selection Selection, extractedFuncName string, debugOutput bool) string {
 	fileSet, astFile := astFromFile(inputFileName)
-	createAstFileDump(inputFileName+".ast", fileSet, astFile)
+	if debugOutput {
+		createAstFileDump(inputFileName+".ast", fileSet, astFile)
+	}
 	doExtraction(fileSet, astFile, selection, extractedFuncName)
 	return stringFrom(fileSet, astFile)
 }

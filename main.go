@@ -19,8 +19,8 @@ func main() {
 	kingpin.Parse()
 	adjustedSelection := ShrinkToNonWhiteSpace(selectionFromString(*selection), util.ReadFileAsStringOrPanic(*inputFilename))
 	if *outputFilename == "" {
-		fmt.Println(ExtractFileToString(*inputFilename, adjustedSelection, *funcName))
+		fmt.Println(ExtractFileToString(*inputFilename, adjustedSelection, *funcName, false))
 	} else {
-		ExtractFileToFile(*inputFilename, adjustedSelection, *funcName, *outputFilename)
+		ExtractFileToFile(*inputFilename, adjustedSelection, *funcName, *outputFilename, false)
 	}
 }

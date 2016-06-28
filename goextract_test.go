@@ -52,7 +52,7 @@ var _ = Describe("Goextract", func() {
 			util.PanicOnError(err)
 			defer os.Remove(tmpfile.Name())
 
-			ExtractFileToFile(filepath.Join("test_data", filename), selection, extractedFuncName, tmpfile.Name())
+			ExtractFileToFile(filepath.Join("test_data", filename), selection, extractedFuncName, tmpfile.Name(), true)
 
 			Expect(tmpfile.Name()).To(HaveSameContentAs(filepath.Join("test_data", prefix) + ".go.output"))
 		})
