@@ -7,10 +7,10 @@ func i()      {}
 func f() {
 	g()
 	x := MyExtractedFunc()
-
 	y := x
 	_ = y
 }
+
 func MyExtractedFunc() int {
 	x := 3
 	h(x)

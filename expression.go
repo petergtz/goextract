@@ -59,84 +59,117 @@ func extractExpressionAsFunc(
 	params := varIdentsUsedIn([]ast.Node{expr})
 	util.MapStringAstIdentRemoveKeys(params, namesOf(globalVarIdents(astFile)))
 
+	newExpr := CopyNode(callExprWith(extractedFuncName, params)).(ast.Expr)
+	RecalcPoses(newExpr, expr.Pos(), nil, 0)
 	switch typedNode := parent.(type) {
 	case *ast.AssignStmt:
 		for i, rhs := range typedNode.Rhs {
 			if rhs == expr {
-				typedNode.Rhs[i] = callExprWith(extractedFuncName, params)
+				typedNode.Rhs[i] = newExpr
 			}
 		}
 		for i, lhs := range typedNode.Lhs {
 			if lhs == expr {
-				typedNode.Lhs[i] = callExprWith(extractedFuncName, params)
+				typedNode.Lhs[i] = newExpr
 			}
 		}
 	case *ast.CallExpr:
 		for i, arg := range typedNode.Args {
 			if arg == expr {
-				typedNode.Args[i] = callExprWith(extractedFuncName, params)
+				typedNode.Args[i] = newExpr
 			}
 		}
 	case *ast.ExprStmt:
-		typedNode.X = callExprWith(extractedFuncName, params)
+		typedNode.X = newExpr
 
 	case *ast.ReturnStmt:
 		for i, result := range typedNode.Results {
 			if result == expr {
-				typedNode.Results[i] = callExprWith(extractedFuncName, params)
+				typedNode.Results[i] = newExpr
 			}
 		}
 	case *ast.IfStmt:
 		if typedNode.Cond == expr {
-			typedNode.Cond = callExprWith(extractedFuncName, params)
+			typedNode.Cond = newExpr
 		}
 
 	case *ast.CaseClause:
 		for i, caseExpr := range typedNode.List {
 			if caseExpr == expr {
-				typedNode.List[i] = callExprWith(extractedFuncName, params)
+				typedNode.List[i] = newExpr
 			}
 		}
 
 	case *ast.SwitchStmt:
 		if typedNode.Tag == expr {
-			typedNode.Tag = callExprWith(extractedFuncName, params)
+			typedNode.Tag = newExpr
 		}
 
 	case *ast.ForStmt:
 		if typedNode.Cond == expr {
-			typedNode.Cond = callExprWith(extractedFuncName, params)
+			typedNode.Cond = newExpr
 		}
 
 	case *ast.RangeStmt:
 		if typedNode.Key == expr {
-			typedNode.Key = callExprWith(extractedFuncName, params)
+			typedNode.Key = newExpr
 		} else if typedNode.Value == expr {
-			typedNode.Value = callExprWith(extractedFuncName, params)
+			typedNode.Value = newExpr
 		} else if typedNode.X == expr {
-			typedNode.X = callExprWith(extractedFuncName, params)
+			typedNode.X = newExpr
 		}
 
 	case *ast.SendStmt:
 		if typedNode.Chan == expr {
-			typedNode.Chan = callExprWith(extractedFuncName, params)
+			typedNode.Chan = newExpr
 		} else if typedNode.Value == expr {
-			typedNode.Value = callExprWith(extractedFuncName, params)
+			typedNode.Value = newExpr
 		}
 
 	case *ast.IncDecStmt:
 		if typedNode.X == expr {
-			typedNode.X = callExprWith(extractedFuncName, params)
+			typedNode.X = newExpr
+		}
+
+	case *ast.ValueSpec:
+		for i, value := range typedNode.Values {
+			if value == expr {
+				typedNode.Values[i] = newExpr
+			}
 		}
 
 	default:
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(parent)))
 	}
 
-	astFile.Decls = append(astFile.Decls, singleExprStmtFuncDeclWith(
-		extractedFuncName,
-		fieldsFrom(params),
-		expr))
+	areaRemoved := areaRemoved(fileSet, expr.Pos(), expr.End())
+	lineLengths := lineLengthsFrom(fileSet)
+	lineNum, numLinesToCut, newLineLength := replacementModifications(fileSet, expr.Pos(), expr.End(), newExpr.End(), lineLengths, areaRemoved)
+
+	shiftPosesAfterPos(astFile, newExpr, expr.End(), newExpr.End()-expr.End())
+
+	singleExprStmtFuncDeclWith := CopyNode(singleExprStmtFuncDeclWith(extractedFuncName, fieldsFrom(params), expr)).(*ast.FuncDecl)
+	var moveOffset token.Pos
+	RecalcPoses(singleExprStmtFuncDeclWith, astFile.End()+2, &moveOffset, 0)
+	astFile.Decls = append(astFile.Decls, singleExprStmtFuncDeclWith)
+
+	areaToBeAppended := insertionModifications(astFile, singleExprStmtFuncDeclWith, areaRemoved)
+
+	lineLengths = append(
+		lineLengths[:lineNum+1],
+		lineLengths[lineNum+1+numLinesToCut:]...)
+	lineLengths[lineNum] = newLineLength
+	lineLengths = append(lineLengths, areaToBeAppended...)
+
+	newFileSet := token.NewFileSet()
+	newFileSet.AddFile(fileSet.File(1).Name(), 1, int(astFile.End()))
+	success := newFileSet.File(1).SetLines(ConvertLineLengthsToLineOffsets(lineLengths))
+	if !success {
+		panic("Could not SetLines on File.")
+	}
+	*fileSet = *newFileSet
+
+	moveComments(astFile, moveOffset /*, needs a range to restict which comments to move*/)
 }
 
 func singleExprStmtFuncDeclWith(funcName string, fields []*ast.Field, returnExpr ast.Expr) *ast.FuncDecl {
@@ -148,6 +181,7 @@ func singleExprStmtFuncDeclWith(funcName string, fields []*ast.Field, returnExpr
 	if len(typeIdents) != 0 {
 		var fieldList []*ast.Field
 		for _, typeIdent := range typeIdents {
+			resetPoses(typeIdent)
 			fieldList = append(fieldList, &ast.Field{Type: typeIdent})
 		}
 		returnType = &ast.FieldList{List: fieldList}
@@ -156,10 +190,12 @@ func singleExprStmtFuncDeclWith(funcName string, fields []*ast.Field, returnExpr
 		stmt = &ast.ExprStmt{X: returnExpr}
 	}
 
+	params := &ast.FieldList{List: fields}
+	resetPoses(params)
 	return &ast.FuncDecl{
 		Name: ast.NewIdent(funcName),
 		Type: &ast.FuncType{
-			Params:  &ast.FieldList{List: fields},
+			Params:  params,
 			Results: returnType,
 		},
 		Body: &ast.BlockStmt{List: []ast.Stmt{stmt}},

@@ -12,6 +12,7 @@ func f() {
 func g(x int, y string) (int, bool, string) {
 	return x, true, y
 }
+
 func MyExtractedFunc(i int, s string) (int, bool, string) {
 	return g(i, s)
 }

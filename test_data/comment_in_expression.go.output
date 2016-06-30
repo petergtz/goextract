@@ -1,0 +1,11 @@
+package test_data
+
+var (
+	i = Bla()
+)
+
+func Bla() int {
+	return 1 + 2 +
+		3 + 4 + // here's a comment
+		5
+}

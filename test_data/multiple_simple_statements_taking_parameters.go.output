@@ -8,8 +8,8 @@ func f() {
 	x := 3
 	g()
 	MyExtractedFunc(x)
-
 }
+
 func MyExtractedFunc(x int) {
 	h(x)
 	i()

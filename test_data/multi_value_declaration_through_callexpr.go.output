@@ -10,6 +10,7 @@ func f() {
 func g() (int, bool, string) {
 	return 1, true, "Hello"
 }
+
 func MyExtractedFunc() (int, bool, string) {
 	return g()
 }

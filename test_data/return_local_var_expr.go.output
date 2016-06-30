@@ -4,6 +4,7 @@ func f() int {
 	i := 3
 	return MyExtractedFunc(i)
 }
+
 func MyExtractedFunc(i int) int {
 	return i
 }

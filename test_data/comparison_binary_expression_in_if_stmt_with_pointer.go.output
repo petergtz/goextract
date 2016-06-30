@@ -17,8 +17,8 @@ var (
 
 func bla() {
 	one()
-
 }
+
 func one() {
 	kingpin.Parse()
 	adjustedSelection := ShrinkToNonWhiteSpace(selectionFromString(*selection), util.ReadFileAsStringOrPanic(*inputFilename))
@@ -28,6 +28,7 @@ func one() {
 		ExtractFileToFile(*inputFilename, adjustedSelection, *funcName, *outputFilename)
 	}
 }
+
 func hey() bool {
 	return *outputFilename == ""
 }

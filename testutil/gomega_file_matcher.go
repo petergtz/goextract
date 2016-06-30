@@ -51,9 +51,9 @@ func (matcher *fileContentMatcher) Match(actual interface{}) (bool, error) {
 }
 
 func (matcher *fileContentMatcher) FailureMessage(actual interface{}) string {
-	out, err := exec.Command("colordiff", "-u", matcher.actualFilePath, matcher.expectedFilePath).Output()
+	out, err := exec.Command("colordiff", "-w", "-u", matcher.actualFilePath, matcher.expectedFilePath).Output()
 	if err != nil && strings.Contains(err.Error(), "file not found") {
-		out, err = exec.Command("diff", "-u", matcher.actualFilePath, matcher.expectedFilePath).Output()
+		out, err = exec.Command("diff", "-w", "-u", matcher.actualFilePath, matcher.expectedFilePath).Output()
 	}
 	exitError, ok := err.(*exec.ExitError)
 	if !ok {

@@ -86,17 +86,42 @@ func extractMultipleStatementsAsFunc(
 	indexOfExtractedStmt := indexOf(stmtsToExtract[0].(ast.Stmt), *allStmts)
 	varsUsedAfterwards := overlappingVarsIdentsUsedIn((*allStmts)[indexOfExtractedStmt+len(stmtsToExtract):], varsDeclaredWithinStmtsToExtract)
 
-	replaceStmtsWithFuncCallStmt(
+	newStmt := funcCallStmt(varsUsedAfterwards, extractedFuncName, params, (*allStmts)[indexOfExtractedStmt].Pos())
+	replaceStmtsWithFuncCallStmt(newStmt,
 		allStmts,
-		indexOfExtractedStmt, len(stmtsToExtract),
-		varsUsedAfterwards, extractedFuncName, params)
+		indexOfExtractedStmt, len(stmtsToExtract))
 
-	astFile.Decls = append(astFile.Decls, multipleStmtFuncDeclWith(
+	areaRemoved := areaRemoved(fileSet, (stmtsToExtract)[0].Pos(), (stmtsToExtract)[len(stmtsToExtract)-1].End())
+	lineLengths := lineLengthsFrom(fileSet)
+	lineNum, numLinesToCut, newLineLength := replacementModifications(fileSet, (stmtsToExtract)[0].Pos(), (stmtsToExtract)[len(stmtsToExtract)-1].End(), newStmt.End(), lineLengths, areaRemoved)
+
+	shiftPosesAfterPos(astFile, newStmt, (stmtsToExtract)[len(stmtsToExtract)-1].End(), newStmt.End()-stmtsToExtract[len(stmtsToExtract)-1].End())
+
+	multipleStmtFuncDecl := CopyNode(multipleStmtFuncDeclWith(
 		extractedFuncName,
 		fieldsFrom(params),
 		stmtsFromNodes(stmtsToExtract),
 		exprsFrom(varsUsedAfterwards),
-	))
+	)).(*ast.FuncDecl)
+	var moveOffset token.Pos
+	RecalcPoses(multipleStmtFuncDecl, astFile.End()+2, &moveOffset, 0)
+	astFile.Decls = append(astFile.Decls, multipleStmtFuncDecl)
+
+	areaToBeAppended := insertionModificationsForStmts(astFile, multipleStmtFuncDecl, areaRemoved, exprsFrom(varsUsedAfterwards))
+
+	lineLengths = append(
+		lineLengths[:lineNum+1],
+		lineLengths[lineNum+1+numLinesToCut:]...)
+	lineLengths[lineNum] = newLineLength
+	lineLengths = append(lineLengths, areaToBeAppended...)
+
+	newFileSet := token.NewFileSet()
+	newFileSet.AddFile(fileSet.File(1).Name(), 1, int(astFile.End()))
+	newFileSet.File(1).SetLines(ConvertLineLengthsToLineOffsets(lineLengths))
+	*fileSet = *newFileSet
+
+	moveComments(astFile, moveOffset /*, needs a range to restict which comments to move*/)
+
 }
 
 func stmtsFromBlockStmt(node ast.Node) *[]ast.Stmt {
@@ -112,21 +137,23 @@ func stmtsFromBlockStmt(node ast.Node) *[]ast.Stmt {
 	}
 }
 
-func replaceStmtsWithFuncCallStmt(allStmts *[]ast.Stmt, indexOfExtractedStmt int, count int, varsUsedAfterwards map[string]*ast.Ident, extractedFuncName string, params map[string]*ast.Ident) {
-	(*allStmts)[indexOfExtractedStmt] = funcCallStmt(varsUsedAfterwards, extractedFuncName, params)
+func replaceStmtsWithFuncCallStmt(funcCallStmt ast.Stmt, allStmts *[]ast.Stmt, indexOfExtractedStmt int, count int) {
+	(*allStmts)[indexOfExtractedStmt] = funcCallStmt
 	(*allStmts) = append((*allStmts)[:indexOfExtractedStmt+1], (*allStmts)[indexOfExtractedStmt+count:]...)
 }
 
-func funcCallStmt(varsUsedAfterwards map[string]*ast.Ident, extractedFuncName string, params map[string]*ast.Ident) ast.Stmt {
+func funcCallStmt(varsUsedAfterwards map[string]*ast.Ident, extractedFuncName string, params map[string]*ast.Ident, pos token.Pos) (result ast.Stmt) {
 	if len(varsUsedAfterwards) == 0 {
-		return &ast.ExprStmt{X: callExprWith(extractedFuncName, params)}
+		result = CopyNode(&ast.ExprStmt{X: callExprWith(extractedFuncName, params)}).(ast.Stmt)
 	} else {
-		return &ast.AssignStmt{
+		result = CopyNode(&ast.AssignStmt{
 			Lhs: []ast.Expr{ast.NewIdent(namesOf(varsUsedAfterwards)[0])},
 			Tok: token.DEFINE,
 			Rhs: []ast.Expr{callExprWith(extractedFuncName, params)},
-		}
+		}).(ast.Stmt)
 	}
+	RecalcPoses(result, pos, nil, 0)
+	return
 }
 
 func identsFromExprs(exprs []ast.Expr) (idents []*ast.Ident) {
@@ -146,14 +173,27 @@ func multipleStmtFuncDeclWith(
 	allStmts := make([]ast.Stmt, len(stmts), len(stmts)+1)
 	copy(allStmts, stmts)
 	var returnType *ast.FieldList
-	if len(definedVars) != 0 {
-		allStmts = append(allStmts, &ast.ReturnStmt{Results: definedVars})
-		returnType = &ast.FieldList{List: fieldListFromIdents(definedVars)}
+	definedVarsCopy := copyExprSlice(definedVars)
+	for _, t := range definedVarsCopy {
+		resetPoses(t)
+	}
+	if len(definedVarsCopy) != 0 {
+		allStmts = append(allStmts, &ast.ReturnStmt{Results: definedVarsCopy})
+		fieldListCopy := fieldListFromIdents(definedVarsCopy)
+		for _, t := range fieldListCopy {
+			resetPoses(t)
+		}
+
+		returnType = &ast.FieldList{List: fieldListCopy}
+	}
+	fieldsCopy := copyFieldSlice(fields)
+	for _, t := range fieldsCopy {
+		resetPoses(t)
 	}
 	return &ast.FuncDecl{
 		Name: ast.NewIdent(extractedFuncName),
 		Type: &ast.FuncType{
-			Params:  &ast.FieldList{List: fields},
+			Params:  &ast.FieldList{List: fieldsCopy},
 			Results: returnType,
 		},
 		Body: &ast.BlockStmt{List: allStmts},

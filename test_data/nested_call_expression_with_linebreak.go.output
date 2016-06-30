@@ -1,7 +1,9 @@
 package test_data
 
 func f() {
-	outer(MyExtractedFunc())
+	outer(
+		MyExtractedFunc(),
+	)
 }
 
 func outer(dummy int) {}
@@ -9,6 +11,7 @@ func outer(dummy int) {}
 func inner() int {
 	return 0
 }
+
 func MyExtractedFunc() int {
 	return inner()
 }

@@ -9,6 +9,7 @@ func outer(dummy int) {}
 func inner() int {
 	return 0
 }
+
 func MyExtractedFunc() int {
 	return inner()
 }

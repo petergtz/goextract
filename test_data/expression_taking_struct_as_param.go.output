@@ -10,6 +10,7 @@ func f() {
 }
 
 func g(myStruct *MyStruct) {}
+
 func MyExtractedFunc(v *MyStruct) {
 	g(v)
 }

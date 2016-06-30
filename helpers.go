@@ -103,16 +103,29 @@ func namesOf(idents map[string]*ast.Ident) []string {
 func exprsFrom(idents map[string]*ast.Ident) []ast.Expr {
 	result := make([]ast.Expr, len(idents))
 	for i, key := range sortedKeysFrom(idents) {
-		result[i] = idents[key]
+		result[i] = CopyNode(idents[key]).(ast.Expr)
 	}
 	return result
 }
 
 func callExprWith(funcName string, params map[string]*ast.Ident) *ast.CallExpr {
+	fun := &ast.Ident{Name: funcName /*, NamePos: pos*/}
+	args := exprsFrom(params)
+	// currentPos := fun.End() + 2
+	// for _, arg := range args {
+	// 	adjustPoses(arg, currentPos)
+	// 	currentPos = arg.End() + 1
+	// }
 	return &ast.CallExpr{
-		Fun:  ast.NewIdent(funcName),
-		Args: exprsFrom(params),
+		Fun: fun,
+		// Lparen: fun.End() + 1,
+		Args: args,
+		// Rparen: currentPos,
 	}
+}
+
+func adjustPoses(node ast.Node, pos token.Pos) {
+
 }
 
 func fieldsFrom(params map[string]*ast.Ident) []*ast.Field {

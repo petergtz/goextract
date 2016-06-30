@@ -9,8 +9,8 @@ var x = 3
 func f() {
 	g()
 	MyExtractedFunc()
-
 }
+
 func MyExtractedFunc() {
 	h(x)
 	i()

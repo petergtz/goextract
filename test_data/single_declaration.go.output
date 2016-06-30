@@ -3,6 +3,7 @@ package test_data
 func f() {
 	i := MyExtractedFunc()
 }
+
 func MyExtractedFunc() int {
 	return 3
 }

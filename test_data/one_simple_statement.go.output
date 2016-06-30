@@ -7,9 +7,9 @@ func i() {}
 func f() {
 	g()
 	MyExtractedFunc()
-
 	i()
 }
+
 func MyExtractedFunc() {
 	h()
 }

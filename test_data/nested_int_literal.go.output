@@ -5,6 +5,7 @@ func f() {
 }
 
 func outer(dummy int) {}
+
 func MyExtractedFunc() int {
 	return 3
 }
