@@ -54,6 +54,10 @@ package test_data
 
 goextract is quite smart in recognizing local variables or expression and will usually do the right thing during the extraction to make sure the logic of your code didn't change.
 
+## Caveats
+
+Please note that goextract doesn't handle comments correctly yet. If your code contains any kinds of comments anywhere, it's not recommended yet to use goextract.
+
 ## Using goextract in Your Editor
 
 There's currently a [goextract extension](https://atom.io/packages/goextract) for the [Atom](https://atom.io/) editor.
