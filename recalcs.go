@@ -350,7 +350,9 @@ func ConvertLineLengthsToLineOffsets(lineLengths []int) []int {
 
 func shiftPosesAfterPos(node ast.Node, newNode ast.Node, pos token.Pos, by token.Pos) {
 	// TODO: this must also move comments
+	// ^^^ It looks like this is done
 	var offset token.Pos
+	visitedCommentGroups := make(map[*ast.CommentGroup]bool)
 	ast.Inspect(node, func(node ast.Node) bool {
 		if node == nil {
 			return true
@@ -361,9 +363,20 @@ func shiftPosesAfterPos(node ast.Node, newNode ast.Node, pos token.Pos, by token
 		if node.End() > pos && offset == 0 {
 			offset = by
 		}
+		if commentGroup, ok := node.(*ast.CommentGroup); ok {
+			visitedCommentGroups[commentGroup] = true
+		}
 		shiftPosesNonRecursively(node, offset, pos)
 		return true
 	})
+	for _, commentGroup := range node.(*ast.File).Comments {
+		for _, comment := range commentGroup.List {
+			if !visitedCommentGroups[commentGroup] && comment.Slash > pos {
+				comment.Slash += by
+			}
+		}
+	}
+
 }
 
 func insertionModifications(astFile *ast.File, funcDecl *ast.FuncDecl, areaRemoved []Range) (areaToBeAppended []int) {
@@ -403,10 +416,12 @@ func insertionModificationsForStmts(astFile *ast.File, funcDecl *ast.FuncDecl, a
 }
 
 // TODO this moves all comments instead of just correct ones.
-func moveComments(astFile *ast.File, moveOffset token.Pos) {
+func moveComments(astFile *ast.File, moveOffset token.Pos, pos, end token.Pos) {
 	for _, commentGroup := range astFile.Comments {
 		for _, comment := range commentGroup.List {
-			comment.Slash += moveOffset
+			if comment.Slash >= pos && comment.Slash <= end {
+				comment.Slash += moveOffset
+			}
 		}
 	}
 }

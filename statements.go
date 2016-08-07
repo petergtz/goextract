@@ -120,7 +120,7 @@ func extractMultipleStatementsAsFunc(
 	newFileSet.File(1).SetLines(ConvertLineLengthsToLineOffsets(lineLengths))
 	*fileSet = *newFileSet
 
-	moveComments(astFile, moveOffset /*, needs a range to restict which comments to move*/)
+	moveComments(astFile, moveOffset, (stmtsToExtract)[0].Pos(), (stmtsToExtract)[len(stmtsToExtract)-1].End())
 
 }
 

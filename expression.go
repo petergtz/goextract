@@ -6,6 +6,8 @@ import (
 	"go/token"
 	"reflect"
 
+	"github.com/pkg/math"
+
 	"github.com/petergtz/goextract/util"
 )
 
@@ -150,7 +152,7 @@ func extractExpressionAsFunc(
 
 	singleExprStmtFuncDeclWith := CopyNode(singleExprStmtFuncDeclWith(extractedFuncName, fieldsFrom(params), expr)).(*ast.FuncDecl)
 	var moveOffset token.Pos
-	RecalcPoses(singleExprStmtFuncDeclWith, astFile.End()+2, &moveOffset, 0)
+	RecalcPoses(singleExprStmtFuncDeclWith, token.Pos(math.Max(int(astFile.End()), endOf(astFile.Comments)))+2, &moveOffset, 0)
 	astFile.Decls = append(astFile.Decls, singleExprStmtFuncDeclWith)
 
 	areaToBeAppended := insertionModifications(astFile, singleExprStmtFuncDeclWith, areaRemoved)
@@ -162,14 +164,35 @@ func extractExpressionAsFunc(
 	lineLengths = append(lineLengths, areaToBeAppended...)
 
 	newFileSet := token.NewFileSet()
-	newFileSet.AddFile(fileSet.File(1).Name(), 1, int(astFile.End()))
+	newFileSet.AddFile(fileSet.File(1).Name(), 1, sizeFrom(lineLengths))
 	success := newFileSet.File(1).SetLines(ConvertLineLengthsToLineOffsets(lineLengths))
 	if !success {
 		panic("Could not SetLines on File.")
 	}
 	*fileSet = *newFileSet
 
-	moveComments(astFile, moveOffset /*, needs a range to restict which comments to move*/)
+	moveComments(astFile, moveOffset, expr.Pos(), expr.End())
+}
+
+func sizeFrom(lineLengths []int) (length int) {
+	for _, lineLength := range lineLengths {
+		length += lineLength + 1
+	}
+	return
+}
+
+func endOf(commentGroups []*ast.CommentGroup) (end int) {
+	for _, commentGroup := range commentGroups {
+		end = math.Max(endOf2(commentGroup), end)
+	}
+	return
+}
+
+func endOf2(commentGroup *ast.CommentGroup) (end int) {
+	for _, comment := range commentGroup.List {
+		end = math.Max(int(comment.End()), end)
+	}
+	return
 }
 
 func singleExprStmtFuncDeclWith(funcName string, fields []*ast.Field, returnExpr ast.Expr) *ast.FuncDecl {
