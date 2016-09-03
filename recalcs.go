@@ -379,7 +379,7 @@ func shiftPosesAfterPos(node ast.Node, newNode ast.Node, pos token.Pos, by token
 
 }
 
-func insertionModifications(astFile *ast.File, funcDecl *ast.FuncDecl, areaRemoved []Range) (areaToBeAppended []int) {
+func areaToBeAppended(funcDecl *ast.FuncDecl, areaRemoved []Range) (areaToBeAppended []int) {
 	linelengths := make([]int, len(areaRemoved)-1)
 	for i, line := range areaRemoved[1:] {
 		linelengths[i] = line.end

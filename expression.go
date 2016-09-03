@@ -145,9 +145,6 @@ func extractExpressionAsFunc(
 	}
 
 	removedComments := removeComments(astFile, expr.Pos(), expr.End())
-	areaRemoved := areaRemoved(fileSet, expr.Pos(), expr.End())
-	lineLengths := lineLengthsFrom(fileSet)
-	lineNum, numLinesToCut, newLineLength := replacementModifications(fileSet, expr.Pos(), expr.End(), newExpr.End(), lineLengths, areaRemoved)
 
 	shiftPosesAfterPos(astFile, newExpr, expr.End(), newExpr.End()-expr.End())
 
@@ -157,13 +154,17 @@ func extractExpressionAsFunc(
 	astFile.Comments = append(astFile.Comments, removedComments...)
 	astFile.Decls = append(astFile.Decls, singleExprStmtFuncDeclWith)
 
-	areaToBeAppended := insertionModifications(astFile, singleExprStmtFuncDeclWith, areaRemoved)
+	moveComments(astFile, moveOffset, expr.Pos(), expr.End())
 
+	areaRemoved := areaRemoved(fileSet, expr.Pos(), expr.End())
+	lineLengths := lineLengthsFrom(fileSet)
+	lineNum, numLinesToCut, newLineLength := replacementModifications(
+		fileSet, expr.Pos(), expr.End(), newExpr.End(), lineLengths, areaRemoved)
 	lineLengths = append(
 		lineLengths[:lineNum+1],
 		lineLengths[lineNum+1+numLinesToCut:]...)
 	lineLengths[lineNum] = newLineLength
-	lineLengths = append(lineLengths, areaToBeAppended...)
+	lineLengths = append(lineLengths, areaToBeAppended(singleExprStmtFuncDeclWith, areaRemoved)...)
 
 	newFileSet := token.NewFileSet()
 	newFileSet.AddFile(fileSet.File(1).Name(), 1, sizeFrom(lineLengths))
@@ -173,7 +174,6 @@ func extractExpressionAsFunc(
 	}
 	*fileSet = *newFileSet
 
-	moveComments(astFile, moveOffset, expr.Pos(), expr.End())
 }
 
 func removeComments(astFile *ast.File, pos, end token.Pos) (result []*ast.CommentGroup) {
