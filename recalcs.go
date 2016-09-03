@@ -371,7 +371,7 @@ func shiftPosesAfterPos(node ast.Node, newNode ast.Node, pos token.Pos, by token
 	})
 	for _, commentGroup := range node.(*ast.File).Comments {
 		for _, comment := range commentGroup.List {
-			if !visitedCommentGroups[commentGroup] && comment.Slash > pos {
+			if !visitedCommentGroups[commentGroup] && comment.End() > pos {
 				comment.Slash += by
 			}
 		}

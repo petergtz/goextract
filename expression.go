@@ -144,6 +144,7 @@ func extractExpressionAsFunc(
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(parent)))
 	}
 
+	removedComments := removeComments(astFile, expr.Pos(), expr.End())
 	areaRemoved := areaRemoved(fileSet, expr.Pos(), expr.End())
 	lineLengths := lineLengthsFrom(fileSet)
 	lineNum, numLinesToCut, newLineLength := replacementModifications(fileSet, expr.Pos(), expr.End(), newExpr.End(), lineLengths, areaRemoved)
@@ -153,6 +154,7 @@ func extractExpressionAsFunc(
 	singleExprStmtFuncDeclWith := CopyNode(singleExprStmtFuncDeclWith(extractedFuncName, fieldsFrom(params), expr)).(*ast.FuncDecl)
 	var moveOffset token.Pos
 	RecalcPoses(singleExprStmtFuncDeclWith, token.Pos(math.Max(int(astFile.End()), endOf(astFile.Comments)))+2, &moveOffset, 0)
+	astFile.Comments = append(astFile.Comments, removedComments...)
 	astFile.Decls = append(astFile.Decls, singleExprStmtFuncDeclWith)
 
 	areaToBeAppended := insertionModifications(astFile, singleExprStmtFuncDeclWith, areaRemoved)
@@ -172,6 +174,19 @@ func extractExpressionAsFunc(
 	*fileSet = *newFileSet
 
 	moveComments(astFile, moveOffset, expr.Pos(), expr.End())
+}
+
+func removeComments(astFile *ast.File, pos, end token.Pos) (result []*ast.CommentGroup) {
+	for i, commentGroup := range astFile.Comments {
+		for _, comment := range commentGroup.List {
+			if comment.Slash >= pos && comment.Slash <= end {
+				result = append(result, commentGroup)
+				astFile.Comments = append(astFile.Comments[:i], astFile.Comments[i+1:]...)
+				break
+			}
+		}
+	}
+	return
 }
 
 func sizeFrom(lineLengths []int) (length int) {
