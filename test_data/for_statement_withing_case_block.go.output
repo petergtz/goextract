@@ -15,11 +15,9 @@ func extractMultipleStatements(
 	stmtsToExtract []ast.Node,
 	parentNode ast.Node,
 	extractedFuncName string) {
-	params := varIdentsUsedIn(stmtsToExtract)
-	varsDeclaredWithinStmtsToExtract :=
-		varIdentsDeclaredWithin(stmtsToExtract)
-	util.MapStringAstIdentRemoveKeys(params, namesOf(varsDeclaredWithinStmtsToExtract))
-	util.MapStringAstIdentRemoveKeys(params, namesOf(globalVarIdents(astFile)))
+	params := make(map[string]*ast.Ident) //varIdentsUsedIn([]ast.Node{expr})
+	//	varsDeclaredWithinStmtsToExtract :=
+	//		varIdentsDeclaredWithin(stmtsToExtract)
 
 	var varsUsedAfterwards map[string]*ast.Ident
 
@@ -28,7 +26,7 @@ func extractMultipleStatements(
 	switch typedParentNode := parentNode.(type) {
 	case *ast.BlockStmt:
 		indexOfExtractedStmt := MyExtractedFunc(stmtsToExtract, typedParentNode)
-		varsUsedAfterwards = overlappingVarsIdentsUsedIn(typedParentNode.List[indexOfExtractedStmt+len(stmtsToExtract):], varsDeclaredWithinStmtsToExtract)
+
 		for _, node := range stmtsToExtract {
 			stmts = append(stmts, node.(ast.Stmt))
 		}
@@ -57,7 +55,19 @@ func extractMultipleStatements(
 	))
 }
 
-func MyExtractedFunc(stmtsToExtract []ast.Node, typedParentNode ast.Node) int {
+func callExprWith(funcName string, params map[string]*ast.Ident) *ast.CallExpr {
+	return nil
+}
+
+func singleExprStmtFuncDeclWith(funcName string, fields []*ast.Field, returnExpr ast.Expr) *ast.FuncDecl {
+	return nil
+}
+
+func fieldsFrom(params map[string]*ast.Ident) []*ast.Field {
+	return nil
+}
+
+func MyExtractedFunc(stmtsToExtract []ast.Node, typedParentNode *ast.BlockStmt) int {
 	var indexOfExtractedStmt int
 	for i, stmt := range typedParentNode.List {
 		if stmt == stmtsToExtract[0] {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"go/types"
 	"sort"
 	"strings"
 )
@@ -128,12 +129,12 @@ func adjustPoses(node ast.Node, pos token.Pos) {
 
 }
 
-func fieldsFrom(params map[string]*ast.Ident) []*ast.Field {
+func fieldsFrom(params map[string]*ast.Ident, pkg *types.Package) []*ast.Field {
 	result := make([]*ast.Field, len(params))
 	for i, key := range sortedKeysFrom(params) {
 		result[i] = &ast.Field{
 			Names: []*ast.Ident{ast.NewIdent(key)},
-			Type:  deduceTypeExprForVarIdent(params[key]),
+			Type:  deduceWithTypeLib(params[key], pkg),
 		}
 	}
 	return result
@@ -296,11 +297,4 @@ func deduceTypeExprForVarIdent(ident *ast.Ident) ast.Expr {
 	default:
 		panic(fmt.Sprintf("Unexpected decl type %T", typedDecl))
 	}
-}
-
-func deduceTypeExprsForVarIdents(varIdents []*ast.Ident) (typeIdents []ast.Expr) {
-	for _, ident := range varIdents {
-		typeIdents = append(typeIdents, deduceTypeExprForVarIdent(ident))
-	}
-	return
 }

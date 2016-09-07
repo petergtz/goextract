@@ -15,8 +15,8 @@ func extractExpression(
 	expr ast.Expr,
 	parent ast.Node,
 	extractedFuncName string) {
-	params := varIdentsUsedIn([]ast.Node{expr})
-	util.MapStringAstIdentRemoveKeys(params, namesOf(globalVarIdents(astFile)))
+	params := make(map[string]*ast.Ident) //varIdentsUsedIn([]ast.Node{expr})
+	util.MapStringAstIdentRemoveKeys(params, nil /*namesOf(globalVarIdents(astFile))*/)
 
 	switch typedNode := parent.(type) {
 	case *ast.AssignStmt:
@@ -49,4 +49,16 @@ func extractExpression(
 		extractedFuncName,
 		fieldsFrom(params),
 		expr))
+}
+
+func callExprWith(funcName string, params map[string]*ast.Ident) *ast.CallExpr {
+	return nil
+}
+
+func singleExprStmtFuncDeclWith(funcName string, fields []*ast.Field, returnExpr ast.Expr) *ast.FuncDecl {
+	return nil
+}
+
+func fieldsFrom(params map[string]*ast.Ident) []*ast.Field {
+	return nil
 }

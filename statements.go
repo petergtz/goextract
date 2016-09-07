@@ -3,8 +3,13 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"go/importer"
 	"go/token"
+	"go/types"
+	"os"
 	"reflect"
+
+	"strings"
 
 	"github.com/petergtz/goextract/util"
 )
@@ -77,6 +82,12 @@ func extractMultipleStatementsAsFunc(
 	stmtsToExtract []ast.Node,
 	parentNode ast.Node,
 	extractedFuncName string) {
+
+	conf := types.Config{Importer: importer.Default()}
+	pkg, err := conf.Check("some/path", fileSet, []*ast.File{astFile}, nil)
+	fmt.Fprintln(os.Stderr, err)
+	// util.PanicOnError(err)
+
 	params := varIdentsUsedIn(stmtsToExtract)
 	varsDeclaredWithinStmtsToExtract := varIdentsDeclaredWithin(stmtsToExtract)
 	util.MapStringAstIdentRemoveKeys(params, namesOf(varsDeclaredWithinStmtsToExtract))
@@ -99,9 +110,10 @@ func extractMultipleStatementsAsFunc(
 
 	multipleStmtFuncDecl := CopyNode(multipleStmtFuncDeclWith(
 		extractedFuncName,
-		fieldsFrom(params),
+		fieldsFrom(params, pkg),
 		stmtsFromNodes(stmtsToExtract),
 		exprsFrom(varsUsedAfterwards),
+		pkg,
 	)).(*ast.FuncDecl)
 	var moveOffset token.Pos
 	RecalcPoses(multipleStmtFuncDecl, astFile.End()+2, &moveOffset, 0)
@@ -168,21 +180,22 @@ func multipleStmtFuncDeclWith(
 	fields []*ast.Field,
 	stmts []ast.Stmt,
 	// TODO should these be ast.Idents?
-	definedVars []ast.Expr) *ast.FuncDecl {
+	definedVars []ast.Expr,
+	pkg *types.Package) *ast.FuncDecl {
 
 	allStmts := make([]ast.Stmt, len(stmts), len(stmts)+1)
 	copy(allStmts, stmts)
 	var returnType *ast.FieldList
 	definedVarsCopy := copyExprSlice(definedVars)
+	fieldListCopy := fieldListFromIdents(definedVarsCopy, pkg)
+	for _, t := range fieldListCopy {
+		resetPoses(t)
+	}
 	for _, t := range definedVarsCopy {
 		resetPoses(t)
 	}
 	if len(definedVarsCopy) != 0 {
 		allStmts = append(allStmts, &ast.ReturnStmt{Results: definedVarsCopy})
-		fieldListCopy := fieldListFromIdents(definedVarsCopy)
-		for _, t := range fieldListCopy {
-			resetPoses(t)
-		}
 
 		returnType = &ast.FieldList{List: fieldListCopy}
 	}
@@ -217,10 +230,30 @@ func stmtsFromNodes(nodes []ast.Node) []ast.Stmt {
 	return stmts
 }
 
-func fieldListFromIdents(idents []ast.Expr) []*ast.Field {
+func fieldListFromIdents(idents []ast.Expr, pkg *types.Package) []*ast.Field {
 	var fieldList []*ast.Field
-	for _, typeIdent := range deduceTypeExprsForVarIdents(identsFromExprs(idents)) {
-		fieldList = append(fieldList, &ast.Field{Type: typeIdent})
+	for _, ident := range idents {
+		fieldList = append(fieldList, &ast.Field{Type: deduceWithTypeLib(ident.(*ast.Ident), pkg)})
 	}
 	return fieldList
+}
+
+func deduceWithTypeLib(ident *ast.Ident, pkg *types.Package) *ast.Ident {
+	_, object := pkg.Scope().Innermost(ident.Pos()).LookupParent(ident.Name, 0)
+	if object == nil {
+		// panic(fmt.Sprint("Cannot look up ident with name ", ident.Name, " and pos ", ident.Pos()))
+		fmt.Fprintln(os.Stderr, "Cannot look up ident with name ", ident.Name, " and pos ", ident.Pos())
+		return ast.NewIdent("TypeNotFound")
+	}
+	typeString := object.Type().String()
+	for _, imp := range pkg.Imports() {
+		if strings.Contains(typeString, imp.Path()) {
+			typeString = strings.Replace(typeString, imp.Path(), imp.Name(), 1)
+			break
+		}
+	}
+	// seems necessary for structs declared in this package:
+	typeString = strings.Replace(typeString, pkg.Path()+".", "", 1)
+
+	return ast.NewIdent(typeString)
 }

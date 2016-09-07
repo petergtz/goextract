@@ -3,7 +3,10 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"go/importer"
 	"go/token"
+	"go/types"
+	"os"
 	"reflect"
 
 	"github.com/pkg/math"
@@ -58,6 +61,12 @@ func extractExpressionAsFunc(
 	expr ast.Expr,
 	parent ast.Node,
 	extractedFuncName string) {
+
+	conf := types.Config{Importer: importer.Default()}
+	pkg, err := conf.Check("some/path", fileSet, []*ast.File{astFile}, nil)
+	fmt.Fprintln(os.Stderr, err)
+	// util.PanicOnError(err)
+
 	params := varIdentsUsedIn([]ast.Node{expr})
 	util.MapStringAstIdentRemoveKeys(params, namesOf(globalVarIdents(astFile)))
 
@@ -148,7 +157,7 @@ func extractExpressionAsFunc(
 
 	shiftPosesAfterPos(astFile, newExpr, expr.End(), newExpr.End()-expr.End())
 
-	singleExprStmtFuncDeclWith := CopyNode(singleExprStmtFuncDeclWith(extractedFuncName, fieldsFrom(params), expr)).(*ast.FuncDecl)
+	singleExprStmtFuncDeclWith := CopyNode(singleExprStmtFuncDeclWith(extractedFuncName, fieldsFrom(params, pkg), expr)).(*ast.FuncDecl)
 	var moveOffset token.Pos
 	RecalcPoses(singleExprStmtFuncDeclWith, token.Pos(math.Max(int(astFile.End()), endOf(astFile.Comments)))+2, &moveOffset, 0)
 	astFile.Comments = append(astFile.Comments, removedComments...)
