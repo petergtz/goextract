@@ -120,7 +120,8 @@ func extractMultipleStatementsAsFunc(
 	moveComments(astFile, moveOffset, (stmtsToExtract)[0].Pos(), (stmtsToExtract)[len(stmtsToExtract)-1].End())
 
 	areaRemoved := areaRemoved(fileSet, (stmtsToExtract)[0].Pos(), (stmtsToExtract)[len(stmtsToExtract)-1].End())
-	lineLengths := lineLengthsFrom(fileSet)
+	lineLengths := RecalcLineLengths(lineLengthsFrom(fileSet))
+
 	lineNum, numLinesToCut, newLineLength := replacementModifications(
 		fileSet, (stmtsToExtract)[0].Pos(), (stmtsToExtract)[len(stmtsToExtract)-1].End(), newStmt.End(), lineLengths, areaRemoved)
 	lineLengths = append(
@@ -136,6 +137,19 @@ func extractMultipleStatementsAsFunc(
 		panic("Could not SetLines on File.")
 	}
 	*fileSet = *newFileSet
+}
+
+func RecalcLineLengths(lineLengths []int, fileSet *token.FileSet, stmtsToExtract []ast.Node, newStmt ast.Stmt, areaRemoved []Range) []int {
+	result := make([]int, len(lineLengths))
+	copy(result, lineLengths)
+	lineNum, numLinesToCut, newLineLength := replacementModifications(
+		fileSet, (stmtsToExtract)[0].Pos(), (stmtsToExtract)[len(stmtsToExtract)-1].End(), newStmt.End(), lineLengths, areaRemoved)
+	lineLengths = append(
+		lineLengths[:lineNum+1],
+		lineLengths[lineNum+1+numLinesToCut:]...)
+	lineLengths[lineNum] = newLineLength
+	lineLengths = append(lineLengths, areaToBeAppendedForStmts(multipleStmtFuncDecl, areaRemoved, exprsFrom(varsUsedAfterwards))...)
+	return result
 }
 
 func typesPackage(astFile *ast.File, fileSet *token.FileSet) (*types.Package, *types.Info) {
