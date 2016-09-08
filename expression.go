@@ -3,10 +3,8 @@ package main
 import (
 	"fmt"
 	"go/ast"
-	"go/importer"
 	"go/token"
 	"go/types"
-	"os"
 	"reflect"
 	"strings"
 
@@ -63,21 +61,52 @@ func extractExpressionAsFunc(
 	parent ast.Node,
 	extractedFuncName string) {
 
-	conf := types.Config{Importer: importer.Default()}
-	info := types.Info{
-		Types: make(map[ast.Expr]types.TypeAndValue),
-		Uses:  make(map[*ast.Ident]types.Object),
-		Defs:  make(map[*ast.Ident]types.Object),
-	}
-	pkg, err := conf.Check("some/path", fileSet, []*ast.File{astFile}, &info)
-	fmt.Fprintln(os.Stderr, err)
-	// util.PanicOnError(err)
+	pkg, info := typesPackage(astFile, fileSet)
 
 	params := varIdentsUsedIn([]ast.Node{expr})
 	util.MapStringAstIdentRemoveKeys(params, namesOf(globalVarIdents(astFile)))
 
 	newExpr := CopyNode(callExprWith(extractedFuncName, params)).(ast.Expr)
 	RecalcPoses(newExpr, expr.Pos(), nil, 0)
+	replaceExprWithFuncCallStmt(parent, expr, newExpr)
+
+	removedComments := removeComments(astFile, expr.Pos(), expr.End())
+
+	shiftPosesAfterPos(astFile, newExpr, expr.End(), newExpr.End()-expr.End())
+
+	singleExprStmtFuncDeclWith := CopyNode(singleExprStmtFuncDeclWith(
+		extractedFuncName,
+		fieldsFrom(params, pkg),
+		expr,
+		info,
+	)).(*ast.FuncDecl)
+	var moveOffset token.Pos
+	RecalcPoses(singleExprStmtFuncDeclWith, token.Pos(math.Max(int(astFile.End()), endOf(astFile.Comments)))+2, &moveOffset, 0)
+	astFile.Comments = append(astFile.Comments, removedComments...)
+	astFile.Decls = append(astFile.Decls, singleExprStmtFuncDeclWith)
+
+	moveComments(astFile, moveOffset, expr.Pos(), expr.End())
+
+	areaRemoved := areaRemoved(fileSet, expr.Pos(), expr.End())
+	lineLengths := lineLengthsFrom(fileSet)
+	lineNum, numLinesToCut, newLineLength := replacementModifications(
+		fileSet, expr.Pos(), expr.End(), newExpr.End(), lineLengths, areaRemoved)
+	lineLengths = append(
+		lineLengths[:lineNum+1],
+		lineLengths[lineNum+1+numLinesToCut:]...)
+	lineLengths[lineNum] = newLineLength
+	lineLengths = append(lineLengths, areaToBeAppendedForExpr(singleExprStmtFuncDeclWith, areaRemoved)...)
+
+	newFileSet := token.NewFileSet()
+	newFileSet.AddFile(fileSet.File(1).Name(), 1, sizeFrom(lineLengths))
+	success := newFileSet.File(1).SetLines(ConvertLineLengthsToLineOffsets(lineLengths))
+	if !success {
+		panic("Could not SetLines on File.")
+	}
+	*fileSet = *newFileSet
+}
+
+func replaceExprWithFuncCallStmt(parent ast.Node, expr ast.Expr, newExpr ast.Expr) {
 	switch typedNode := parent.(type) {
 	case *ast.AssignStmt:
 		for i, rhs := range typedNode.Rhs {
@@ -158,36 +187,6 @@ func extractExpressionAsFunc(
 	default:
 		panic(fmt.Sprintf("Type %v not supported yet", reflect.TypeOf(parent)))
 	}
-
-	removedComments := removeComments(astFile, expr.Pos(), expr.End())
-
-	shiftPosesAfterPos(astFile, newExpr, expr.End(), newExpr.End()-expr.End())
-
-	singleExprStmtFuncDeclWith := CopyNode(singleExprStmtFuncDeclWith(extractedFuncName, fieldsFrom(params, pkg), expr, &info)).(*ast.FuncDecl)
-	var moveOffset token.Pos
-	RecalcPoses(singleExprStmtFuncDeclWith, token.Pos(math.Max(int(astFile.End()), endOf(astFile.Comments)))+2, &moveOffset, 0)
-	astFile.Comments = append(astFile.Comments, removedComments...)
-	astFile.Decls = append(astFile.Decls, singleExprStmtFuncDeclWith)
-
-	moveComments(astFile, moveOffset, expr.Pos(), expr.End())
-
-	areaRemoved := areaRemoved(fileSet, expr.Pos(), expr.End())
-	lineLengths := lineLengthsFrom(fileSet)
-	lineNum, numLinesToCut, newLineLength := replacementModifications(
-		fileSet, expr.Pos(), expr.End(), newExpr.End(), lineLengths, areaRemoved)
-	lineLengths = append(
-		lineLengths[:lineNum+1],
-		lineLengths[lineNum+1+numLinesToCut:]...)
-	lineLengths[lineNum] = newLineLength
-	lineLengths = append(lineLengths, areaToBeAppended(singleExprStmtFuncDeclWith, areaRemoved)...)
-
-	newFileSet := token.NewFileSet()
-	newFileSet.AddFile(fileSet.File(1).Name(), 1, sizeFrom(lineLengths))
-	success := newFileSet.File(1).SetLines(ConvertLineLengthsToLineOffsets(lineLengths))
-	if !success {
-		panic("Could not SetLines on File.")
-	}
-	*fileSet = *newFileSet
 
 }
 

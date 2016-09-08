@@ -379,7 +379,7 @@ func shiftPosesAfterPos(node ast.Node, newNode ast.Node, pos token.Pos, by token
 
 }
 
-func areaToBeAppended(funcDecl *ast.FuncDecl, areaRemoved []Range) (areaToBeAppended []int) {
+func areaToBeAppendedForExpr(funcDecl *ast.FuncDecl, areaRemoved []Range) (areaToBeAppended []int) {
 	linelengths := make([]int, len(areaRemoved)-1)
 	for i, line := range areaRemoved[1:] {
 		linelengths[i] = line.end
@@ -397,7 +397,7 @@ func areaToBeAppended(funcDecl *ast.FuncDecl, areaRemoved []Range) (areaToBeAppe
 	return result
 }
 
-func insertionModificationsForStmts(astFile *ast.File, funcDecl *ast.FuncDecl, areaRemoved []Range, varsUsedAfterwards []ast.Expr) (areaToBeAppended []int) {
+func areaToBeAppendedForStmts(funcDecl *ast.FuncDecl, areaRemoved []Range, varsUsedAfterwards []ast.Expr) (areaToBeAppended []int) {
 	linelengths := make([]int, len(areaRemoved))
 	for i, line := range areaRemoved {
 		linelengths[i] = line.end

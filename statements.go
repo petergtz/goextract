@@ -83,10 +83,7 @@ func extractMultipleStatementsAsFunc(
 	parentNode ast.Node,
 	extractedFuncName string) {
 
-	conf := types.Config{Importer: importer.Default()}
-	pkg, err := conf.Check("some/path", fileSet, []*ast.File{astFile}, nil)
-	fmt.Fprintln(os.Stderr, err)
-	// util.PanicOnError(err)
+	pkg, _ := typesPackage(astFile, fileSet)
 
 	params := varIdentsUsedIn(stmtsToExtract)
 	varsDeclaredWithinStmtsToExtract := varIdentsDeclaredWithin(stmtsToExtract)
@@ -98,13 +95,13 @@ func extractMultipleStatementsAsFunc(
 	varsUsedAfterwards := overlappingVarsIdentsUsedIn((*allStmts)[indexOfExtractedStmt+len(stmtsToExtract):], varsDeclaredWithinStmtsToExtract)
 
 	newStmt := funcCallStmt(varsUsedAfterwards, extractedFuncName, params, (*allStmts)[indexOfExtractedStmt].Pos())
+	RecalcPoses(newStmt, (*allStmts)[indexOfExtractedStmt].Pos(), nil, 0)
+
 	replaceStmtsWithFuncCallStmt(newStmt,
 		allStmts,
 		indexOfExtractedStmt, len(stmtsToExtract))
 
-	areaRemoved := areaRemoved(fileSet, (stmtsToExtract)[0].Pos(), (stmtsToExtract)[len(stmtsToExtract)-1].End())
-	lineLengths := lineLengthsFrom(fileSet)
-	lineNum, numLinesToCut, newLineLength := replacementModifications(fileSet, (stmtsToExtract)[0].Pos(), (stmtsToExtract)[len(stmtsToExtract)-1].End(), newStmt.End(), lineLengths, areaRemoved)
+	removedComments := removeComments(astFile, (stmtsToExtract)[0].Pos(), (stmtsToExtract)[len(stmtsToExtract)-1].End())
 
 	shiftPosesAfterPos(astFile, newStmt, (stmtsToExtract)[len(stmtsToExtract)-1].End(), newStmt.End()-stmtsToExtract[len(stmtsToExtract)-1].End())
 
@@ -117,23 +114,41 @@ func extractMultipleStatementsAsFunc(
 	)).(*ast.FuncDecl)
 	var moveOffset token.Pos
 	RecalcPoses(multipleStmtFuncDecl, astFile.End()+2, &moveOffset, 0)
+	astFile.Comments = append(astFile.Comments, removedComments...)
 	astFile.Decls = append(astFile.Decls, multipleStmtFuncDecl)
 
-	areaToBeAppended := insertionModificationsForStmts(astFile, multipleStmtFuncDecl, areaRemoved, exprsFrom(varsUsedAfterwards))
+	moveComments(astFile, moveOffset, (stmtsToExtract)[0].Pos(), (stmtsToExtract)[len(stmtsToExtract)-1].End())
 
+	areaRemoved := areaRemoved(fileSet, (stmtsToExtract)[0].Pos(), (stmtsToExtract)[len(stmtsToExtract)-1].End())
+	lineLengths := lineLengthsFrom(fileSet)
+	lineNum, numLinesToCut, newLineLength := replacementModifications(
+		fileSet, (stmtsToExtract)[0].Pos(), (stmtsToExtract)[len(stmtsToExtract)-1].End(), newStmt.End(), lineLengths, areaRemoved)
 	lineLengths = append(
 		lineLengths[:lineNum+1],
 		lineLengths[lineNum+1+numLinesToCut:]...)
 	lineLengths[lineNum] = newLineLength
-	lineLengths = append(lineLengths, areaToBeAppended...)
+	lineLengths = append(lineLengths, areaToBeAppendedForStmts(multipleStmtFuncDecl, areaRemoved, exprsFrom(varsUsedAfterwards))...)
 
 	newFileSet := token.NewFileSet()
 	newFileSet.AddFile(fileSet.File(1).Name(), 1, int(astFile.End()))
-	newFileSet.File(1).SetLines(ConvertLineLengthsToLineOffsets(lineLengths))
+	success := newFileSet.File(1).SetLines(ConvertLineLengthsToLineOffsets(lineLengths))
+	if !success {
+		panic("Could not SetLines on File.")
+	}
 	*fileSet = *newFileSet
+}
 
-	moveComments(astFile, moveOffset, (stmtsToExtract)[0].Pos(), (stmtsToExtract)[len(stmtsToExtract)-1].End())
-
+func typesPackage(astFile *ast.File, fileSet *token.FileSet) (*types.Package, *types.Info) {
+	conf := types.Config{Importer: importer.Default()}
+	info := types.Info{
+		Types: make(map[ast.Expr]types.TypeAndValue),
+		Uses:  make(map[*ast.Ident]types.Object),
+		Defs:  make(map[*ast.Ident]types.Object),
+	}
+	pkg, err := conf.Check("some/path", fileSet, []*ast.File{astFile}, &info)
+	fmt.Fprintln(os.Stderr, err)
+	// util.PanicOnError(err)
+	return pkg, &info
 }
 
 func stmtsFromBlockStmt(node ast.Node) *[]ast.Stmt {
@@ -164,7 +179,6 @@ func funcCallStmt(varsUsedAfterwards map[string]*ast.Ident, extractedFuncName st
 			Rhs: []ast.Expr{callExprWith(extractedFuncName, params)},
 		}).(ast.Stmt)
 	}
-	RecalcPoses(result, pos, nil, 0)
 	return
 }
 
