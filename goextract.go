@@ -34,7 +34,7 @@ func ExtractFileToFile(inputFileName string, selection Selection, extractedFuncN
 	err := exec.Command("gofmt", "-w", outputFilename).Run()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, util.ReadFileAsStringOrPanic(outputFilename))
-		panic(err)
+		panic("Failed to run gofmt. Err: " + err.Error())
 	}
 }
 
