@@ -1,10 +1,6 @@
 package main
 
 import (
-	"fmt"
-
-	"github.com/petergtz/goextract/util"
-
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -21,11 +17,8 @@ func bla() {
 
 func one() {
 	kingpin.Parse()
-	adjustedSelection := ShrinkToNonWhiteSpace(selectionFromString(*selection), util.ReadFileAsStringOrPanic(*inputFilename))
 	if hey() {
-		fmt.Println(ExtractFileToString(*inputFilename, adjustedSelection, *funcName))
 	} else {
-		ExtractFileToFile(*inputFilename, adjustedSelection, *funcName, *outputFilename)
 	}
 }
 

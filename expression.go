@@ -8,6 +8,7 @@ import (
 	"go/types"
 	"os"
 	"reflect"
+	"strings"
 
 	"github.com/pkg/math"
 
@@ -63,7 +64,12 @@ func extractExpressionAsFunc(
 	extractedFuncName string) {
 
 	conf := types.Config{Importer: importer.Default()}
-	pkg, err := conf.Check("some/path", fileSet, []*ast.File{astFile}, nil)
+	info := types.Info{
+		Types: make(map[ast.Expr]types.TypeAndValue),
+		Uses:  make(map[*ast.Ident]types.Object),
+		Defs:  make(map[*ast.Ident]types.Object),
+	}
+	pkg, err := conf.Check("some/path", fileSet, []*ast.File{astFile}, &info)
 	fmt.Fprintln(os.Stderr, err)
 	// util.PanicOnError(err)
 
@@ -157,7 +163,7 @@ func extractExpressionAsFunc(
 
 	shiftPosesAfterPos(astFile, newExpr, expr.End(), newExpr.End()-expr.End())
 
-	singleExprStmtFuncDeclWith := CopyNode(singleExprStmtFuncDeclWith(extractedFuncName, fieldsFrom(params, pkg), expr)).(*ast.FuncDecl)
+	singleExprStmtFuncDeclWith := CopyNode(singleExprStmtFuncDeclWith(extractedFuncName, fieldsFrom(params, pkg), expr, &info)).(*ast.FuncDecl)
 	var moveOffset token.Pos
 	RecalcPoses(singleExprStmtFuncDeclWith, token.Pos(math.Max(int(astFile.End()), endOf(astFile.Comments)))+2, &moveOffset, 0)
 	astFile.Comments = append(astFile.Comments, removedComments...)
@@ -219,12 +225,25 @@ func endOf2(commentGroup *ast.CommentGroup) (end int) {
 	return
 }
 
-func singleExprStmtFuncDeclWith(funcName string, fields []*ast.Field, returnExpr ast.Expr) *ast.FuncDecl {
+func singleExprStmtFuncDeclWith(funcName string, fields []*ast.Field, returnExpr ast.Expr, info *types.Info) *ast.FuncDecl {
 	var (
 		returnType *ast.FieldList
 		stmt       ast.Stmt
 	)
-	typeIdents := deduceTypeExprsForExpr(returnExpr)
+	typeIdents := []ast.Expr{}
+	typ := info.TypeOf(returnExpr)
+	if typ != nil {
+		typeString := typ.String()
+		if strings.HasPrefix(typeString, "(") && strings.HasSuffix(typeString, ")") {
+			for _, s := range strings.Split(typeString[1:len(typeString)-1], ",") {
+				if s != "" {
+					typeIdents = append(typeIdents, ast.NewIdent(s))
+				}
+			}
+		} else {
+			typeIdents = []ast.Expr{ast.NewIdent(strings.TrimPrefix(typeString, "untyped "))}
+		}
+	}
 	if len(typeIdents) != 0 {
 		var fieldList []*ast.Field
 		for _, typeIdent := range typeIdents {
