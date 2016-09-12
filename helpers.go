@@ -107,20 +107,14 @@ func exprsFrom(idents map[string]*ast.Ident) []ast.Expr {
 	return result
 }
 
-func callExprWith(funcName string, params map[string]*ast.Ident) *ast.CallExpr {
-	fun := &ast.Ident{Name: funcName /*, NamePos: pos*/}
-	args := exprsFrom(params)
-	// currentPos := fun.End() + 2
-	// for _, arg := range args {
-	// 	adjustPoses(arg, currentPos)
-	// 	currentPos = arg.End() + 1
-	// }
-	return &ast.CallExpr{
-		Fun: fun,
-		// Lparen: fun.End() + 1,
-		Args: args,
-		// Rparen: currentPos,
-	}
+func callExprWith(funcName string, params map[string]*ast.Ident, pos token.Pos) *ast.CallExpr {
+	result := CopyNode(&ast.CallExpr{
+		Fun:  &ast.Ident{Name: funcName},
+		Args: exprsFrom(params),
+	}).(*ast.CallExpr)
+	RecalcPoses(result, pos, nil, 0)
+	return result
+
 }
 
 func adjustPoses(node ast.Node, pos token.Pos) {

@@ -66,36 +66,30 @@ func extractExpressionAsFunc(
 	params := varIdentsUsedIn([]ast.Node{expr})
 	util.MapStringAstIdentRemoveKeys(params, namesOf(globalVarIdents(astFile)))
 
-	newExpr := CopyNode(callExprWith(extractedFuncName, params)).(ast.Expr)
-	RecalcPoses(newExpr, expr.Pos(), nil, 0)
-	replaceExprWithFuncCallStmt(parent, expr, newExpr)
+	extractionPos := expr.Pos()
+	extractionEnd := expr.End()
+	newExpr := callExprWith(extractedFuncName, params, extractionPos)
+	replaceExprWithCallExpr(parent, expr, newExpr)
 
-	removedComments := removeComments(astFile, expr.Pos(), expr.End())
+	removedComments := removeComments(astFile, extractionPos, extractionEnd)
 
-	shiftPosesAfterPos(astFile, newExpr, expr.End(), newExpr.End()-expr.End())
+	shiftPosesAfterPos(astFile, newExpr, extractionEnd, newExpr.End()-extractionEnd)
 
-	singleExprStmtFuncDeclWith := CopyNode(singleExprStmtFuncDeclWith(
+	singleExprStmtFuncDecl, moveOffset := singleExprStmtFuncDeclWith(
 		extractedFuncName,
 		fieldsFrom(params, pkg),
 		expr,
 		info,
-	)).(*ast.FuncDecl)
-	var moveOffset token.Pos
-	RecalcPoses(singleExprStmtFuncDeclWith, token.Pos(math.Max(int(astFile.End()), endOf(astFile.Comments)))+2, &moveOffset, 0)
+		token.Pos(math.Max(int(astFile.End()), endOf(astFile.Comments)))+2,
+	)
 	astFile.Comments = append(astFile.Comments, removedComments...)
-	astFile.Decls = append(astFile.Decls, singleExprStmtFuncDeclWith)
+	astFile.Decls = append(astFile.Decls, singleExprStmtFuncDecl)
 
-	moveComments(astFile, moveOffset, expr.Pos(), expr.End())
+	moveComments(astFile, moveOffset, extractionPos, extractionEnd)
 
-	areaRemoved := areaRemoved(fileSet, expr.Pos(), expr.End())
-	lineLengths := lineLengthsFrom(fileSet)
-	lineNum, numLinesToCut, newLineLength := replacementModifications(
-		fileSet, expr.Pos(), expr.End(), newExpr.End(), lineLengths, areaRemoved)
-	lineLengths = append(
-		lineLengths[:lineNum+1],
-		lineLengths[lineNum+1+numLinesToCut:]...)
-	lineLengths[lineNum] = newLineLength
-	lineLengths = append(lineLengths, areaToBeAppendedForExpr(singleExprStmtFuncDeclWith, areaRemoved)...)
+	areaRemoved := areaRemoved(fileSet, extractionPos, extractionEnd)
+	areaToBeAppended := areaToBeAppendedForExpr(singleExprStmtFuncDecl, areaRemoved)
+	lineLengths := recalcLineLengths(lineLengthsFrom(fileSet), fileSet, extractionPos, extractionEnd, newExpr.End(), areaRemoved, areaToBeAppended)
 
 	newFileSet := token.NewFileSet()
 	newFileSet.AddFile(fileSet.File(1).Name(), 1, sizeFrom(lineLengths))
@@ -106,7 +100,7 @@ func extractExpressionAsFunc(
 	*fileSet = *newFileSet
 }
 
-func replaceExprWithFuncCallStmt(parent ast.Node, expr ast.Expr, newExpr ast.Expr) {
+func replaceExprWithCallExpr(parent ast.Node, expr ast.Expr, newExpr ast.Expr) {
 	switch typedNode := parent.(type) {
 	case *ast.AssignStmt:
 		for i, rhs := range typedNode.Rhs {
@@ -224,7 +218,7 @@ func endOf2(commentGroup *ast.CommentGroup) (end int) {
 	return
 }
 
-func singleExprStmtFuncDeclWith(funcName string, fields []*ast.Field, returnExpr ast.Expr, info *types.Info) *ast.FuncDecl {
+func singleExprStmtFuncDeclWith(funcName string, fields []*ast.Field, returnExpr ast.Expr, info *types.Info, pos token.Pos) (*ast.FuncDecl, token.Pos) {
 	var (
 		returnType *ast.FieldList
 		stmt       ast.Stmt
@@ -257,12 +251,15 @@ func singleExprStmtFuncDeclWith(funcName string, fields []*ast.Field, returnExpr
 
 	params := &ast.FieldList{List: fields}
 	resetPoses(params)
-	return &ast.FuncDecl{
+	result := CopyNode(&ast.FuncDecl{
 		Name: ast.NewIdent(funcName),
 		Type: &ast.FuncType{
 			Params:  params,
 			Results: returnType,
 		},
 		Body: &ast.BlockStmt{List: []ast.Stmt{stmt}},
-	}
+	}).(*ast.FuncDecl)
+	var moveOffset token.Pos
+	RecalcPoses(result, pos, &moveOffset, 0)
+	return result, moveOffset
 }
