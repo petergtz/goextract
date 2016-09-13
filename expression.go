@@ -62,20 +62,27 @@ func extractExpressionAsFunc(
 	extractedFuncName string) {
 
 	pkg, info := typesPackage(astFile, fileSet)
+	lineLengths := lineLengthsFrom(fileSet)
 
 	params := varIdentsUsedIn([]ast.Node{expr})
 	util.MapStringAstIdentRemoveKeys(params, namesOf(globalVarIdents(astFile)))
 
 	extractionPos := expr.Pos()
 	extractionEnd := expr.End()
-	newExpr := callExprWith(extractedFuncName, params, extractionPos)
-	replaceExprWithCallExpr(parent, expr, newExpr)
-
+	replacement := callExprWith(extractedFuncName, params, extractionPos)
+	replaceExprWithCallExpr(parent, expr, replacement)
 	removedComments := removeComments(astFile, extractionPos, extractionEnd)
 
-	shiftPosesAfterPos(astFile, newExpr, extractionEnd, newExpr.End()-extractionEnd)
+	shiftPosesAfterPos(astFile, replacement, extractionEnd, replacement.End()-extractionEnd)
+	areaRemoved := areaRemoved(lineLengths, fileSet.Position(extractionPos), fileSet.Position(extractionEnd))
+	lineLengths = recalcLineLengths(
+		lineLengths,
+		fileSet.Position(extractionPos), fileSet.Position(extractionEnd),
+		extractionPos,
+		replacement.End(),
+		areaRemoved)
 
-	singleExprStmtFuncDecl, moveOffset := singleExprStmtFuncDeclWith(
+	extractedFuncDecl, moveOffset := singleExprStmtFuncDeclWith(
 		extractedFuncName,
 		fieldsFrom(params, pkg),
 		expr,
@@ -83,13 +90,12 @@ func extractExpressionAsFunc(
 		token.Pos(math.Max(int(astFile.End()), endOf(astFile.Comments)))+2,
 	)
 	astFile.Comments = append(astFile.Comments, removedComments...)
-	astFile.Decls = append(astFile.Decls, singleExprStmtFuncDecl)
+	astFile.Decls = append(astFile.Decls, extractedFuncDecl)
 
 	moveComments(astFile, moveOffset, extractionPos, extractionEnd)
 
-	areaRemoved := areaRemoved(fileSet, extractionPos, extractionEnd)
-	areaToBeAppended := areaToBeAppendedForExpr(singleExprStmtFuncDecl, areaRemoved)
-	lineLengths := recalcLineLengths(lineLengthsFrom(fileSet), fileSet, extractionPos, extractionEnd, newExpr.End(), areaRemoved, areaToBeAppended)
+	lineLengths = append(lineLengths,
+		areaToBeAppendedForExpr(extractedFuncDecl, areaRemoved)...)
 
 	newFileSet := token.NewFileSet()
 	newFileSet.AddFile(fileSet.File(1).Name(), 1, sizeFrom(lineLengths))

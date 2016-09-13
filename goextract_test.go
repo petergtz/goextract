@@ -19,7 +19,7 @@ import (
 // A better way could be to actually move the test cases back into this file
 // instead of looping automatically through all test files.
 var focusedTests = map[string]bool{
-// "expression_taking_struct_as_param": true,
+// "one_simple_statement": true,
 }
 
 var pendingTests = map[string]bool{

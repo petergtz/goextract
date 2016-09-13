@@ -318,12 +318,15 @@ func lineLengthsFromLines(lines []string) []int {
 	return lineLengths
 }
 
-func replacementModifications(fileSet *token.FileSet, oldPos, oldEnd, newEnd token.Pos, lineLengths []int, areaRemoved []Range) (lineNum, numLinesToCut, newLength int) {
-	oldEndLine := fileSet.Position(oldEnd).Line
-	oldPosLine := fileSet.Position(oldPos).Line
-	numCutLines := oldEndLine - oldPosLine
-	newLinelen := areaRemoved[0].begin + (lineLengths[oldEndLine-1] - areaRemoved[len(areaRemoved)-1].end) + int(newEnd-oldPos)
-	return oldPosLine - 1, numCutLines, newLinelen
+func replacementModifications(
+	start, end token.Position,
+	oldPos, newEnd token.Pos,
+	lineLengths []int,
+	areaRemoved []Range) (lineNum, numLinesToCut, newLength int) {
+	lineNum = start.Line - 1
+	numLinesToCut = end.Line - start.Line
+	newLength = areaRemoved[0].begin + (lineLengths[end.Line-1] - areaRemoved[len(areaRemoved)-1].end) + int(newEnd-oldPos)
+	return
 }
 
 func ConvertLineOffsetsToLineLengths(offsets []int, endPos int) []int {
@@ -387,12 +390,15 @@ func areaToBeAppendedForExpr(funcDecl *ast.FuncDecl, areaRemoved []Range) (areaT
 	result := []int{
 		int(funcDecl.Body.Pos() - funcDecl.Type.Func + 1),
 	}
+	// ---
 	if funcDecl.Type.Results == nil {
 		result = append(result, 1+areaRemoved[0].end-areaRemoved[0].begin)
 	} else {
 		result = append(result, 1+len(token.RETURN.String())+1+areaRemoved[0].end-areaRemoved[0].begin)
 	}
 	result = append(result, linelengths...)
+
+	// ---
 	result = append(result, 1)
 	return result
 }
@@ -405,12 +411,15 @@ func areaToBeAppendedForStmts(funcDecl *ast.FuncDecl, areaRemoved []Range, varsU
 	result := []int{
 		int(funcDecl.Body.Pos() - funcDecl.Type.Func + 1),
 	}
+	// ---
 	result = append(result, linelengths...)
 	// TODO: this if could type assert the last stmt to see if it is a return stmt
 	if len(varsUsedAfterwards) != 0 {
 		vars := funcDecl.Body.List[len(funcDecl.Body.List)-1].(*ast.ReturnStmt).Results
 		result = append(result, 1+len(token.RETURN.String())+1+int(vars[len(vars)-1].End()-vars[0].Pos()))
 	}
+
+	// ---
 	result = append(result, 1)
 	return result
 }
@@ -430,10 +439,7 @@ type Range struct {
 	begin, end int
 }
 
-func areaRemoved(fileSet *token.FileSet, pos, end token.Pos) []Range {
-	lineLengths := lineLengthsFrom(fileSet)
-	b := fileSet.Position(pos)
-	e := fileSet.Position(end)
+func areaRemoved(lineLengths []int, b, e token.Position) []Range {
 	result := make([]Range, e.Line-b.Line+1)
 	if e.Line > b.Line {
 		result[0].begin = b.Column - 1

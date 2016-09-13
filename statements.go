@@ -84,6 +84,7 @@ func extractMultipleStatementsAsFunc(
 	extractedFuncName string) {
 
 	pkg, _ := typesPackage(astFile, fileSet)
+	lineLengths := lineLengthsFrom(fileSet)
 
 	params := varIdentsUsedIn(stmtsToExtract)
 	varsDeclaredWithinStmtsToExtract := varIdentsDeclaredWithin(stmtsToExtract)
@@ -96,14 +97,20 @@ func extractMultipleStatementsAsFunc(
 
 	extractionPos := stmtsToExtract[0].Pos()
 	extractionEnd := stmtsToExtract[len(stmtsToExtract)-1].End()
-	newStmt := funcCallStmt(varsUsedAfterwards, extractedFuncName, params, (*allStmts)[indexOfExtractedStmt].Pos())
-	replaceStmtsWithFuncCallStmt(newStmt, allStmts, indexOfExtractedStmt, len(stmtsToExtract))
-
+	replacement := funcCallStmt(varsUsedAfterwards, extractedFuncName, params, extractionPos)
+	replaceStmtsWithFuncCallStmt(allStmts, indexOfExtractedStmt, len(stmtsToExtract), replacement)
 	removedComments := removeComments(astFile, extractionPos, extractionEnd)
 
-	shiftPosesAfterPos(astFile, newStmt, extractionEnd, newStmt.End()-extractionEnd)
+	shiftPosesAfterPos(astFile, replacement, extractionEnd, replacement.End()-extractionEnd)
+	areaRemoved := areaRemoved(lineLengths, fileSet.Position(extractionPos), fileSet.Position(extractionEnd))
+	lineLengths = recalcLineLengths(
+		lineLengths,
+		fileSet.Position(extractionPos), fileSet.Position(extractionEnd),
+		extractionPos,
+		replacement.End(),
+		areaRemoved)
 
-	multipleStmtFuncDecl, moveOffset := multipleStmtFuncDeclWith(
+	extractedFuncDecl, moveOffset := multipleStmtFuncDeclWith(
 		extractedFuncName,
 		fieldsFrom(params, pkg),
 		stmtsFromNodes(stmtsToExtract),
@@ -112,13 +119,12 @@ func extractMultipleStatementsAsFunc(
 		astFile.End()+2,
 	)
 	astFile.Comments = append(astFile.Comments, removedComments...)
-	astFile.Decls = append(astFile.Decls, multipleStmtFuncDecl)
+	astFile.Decls = append(astFile.Decls, extractedFuncDecl)
 
 	moveComments(astFile, moveOffset, extractionPos, extractionEnd)
 
-	areaRemoved := areaRemoved(fileSet, extractionPos, extractionEnd)
-	areaToBeAppended := areaToBeAppendedForStmts(multipleStmtFuncDecl, areaRemoved, exprsFrom(varsUsedAfterwards))
-	lineLengths := recalcLineLengths(lineLengthsFrom(fileSet), fileSet, extractionPos, extractionEnd, newStmt.End(), areaRemoved, areaToBeAppended)
+	lineLengths = append(lineLengths,
+		areaToBeAppendedForStmts(extractedFuncDecl, areaRemoved, exprsFrom(varsUsedAfterwards))...)
 
 	newFileSet := token.NewFileSet()
 	newFileSet.AddFile(fileSet.File(1).Name(), 1, int(astFile.End()))
@@ -129,16 +135,16 @@ func extractMultipleStatementsAsFunc(
 	*fileSet = *newFileSet
 }
 
-func recalcLineLengths(lineLengths []int, fileSet *token.FileSet, oldPos, oldEnd, newEnd token.Pos, areaRemoved []Range, areaToBeAppended []int) []int {
+func recalcLineLengths(lineLengths []int, start, end token.Position, oldPos, newEnd token.Pos, areaRemoved []Range) []int {
 	result := make([]int, len(lineLengths))
 	copy(result, lineLengths)
 	lineNum, numLinesToCut, newLineLength := replacementModifications(
-		fileSet, oldPos, oldEnd, newEnd, lineLengths, areaRemoved)
+		start, end, oldPos, newEnd, lineLengths, areaRemoved)
 	result = append(
 		result[:lineNum+1],
 		result[lineNum+1+numLinesToCut:]...)
 	result[lineNum] = newLineLength
-	return append(result, areaToBeAppended...)
+	return result
 }
 
 func typesPackage(astFile *ast.File, fileSet *token.FileSet) (*types.Package, *types.Info) {
@@ -167,7 +173,7 @@ func stmtsFromBlockStmt(node ast.Node) *[]ast.Stmt {
 	}
 }
 
-func replaceStmtsWithFuncCallStmt(funcCallStmt ast.Stmt, allStmts *[]ast.Stmt, indexOfExtractedStmt int, count int) {
+func replaceStmtsWithFuncCallStmt(allStmts *[]ast.Stmt, indexOfExtractedStmt int, count int, funcCallStmt ast.Stmt) {
 	(*allStmts)[indexOfExtractedStmt] = funcCallStmt
 	(*allStmts) = append((*allStmts)[:indexOfExtractedStmt+1], (*allStmts)[indexOfExtractedStmt+count:]...)
 }
